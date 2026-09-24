@@ -28,6 +28,24 @@ one account — the server cannot change its own URL).
 - **Alert flow**: at 70% the agent TG-warns; at 90% it TG-orders the
   switch ("move clients to mirror now").
 
+## Live doors (all same code + same env + same VAPI_KEY, one shared KV brain)
+- main: https://ayai-vpx.vercel.app (yusgsg)
+- M1: https://ayai-vpx-yusfkarim2001-1023s-projects.vercel.app
+- M2: https://ayai-vpx-yusfkarim81-7952s-projects.vercel.app
+- M3: https://ayai-vpx-yusfkarim994-4936s-projects.vercel.app
+- M4: https://ayai-vpx-yusfkarims-projects.vercel.app
+
+## Mirror recipe (per new account token)
+1. Copy `vercel/` to clean dir (NO `.vercel/` link inside).
+2. `vercel deploy --prod --token=$T --yes` (creates project).
+3. `PATCH /v9/projects/{id} {"framework":null,"name":"ayai-vpx"}`
+   (else new-runtime entrypoint error).
+4. `vercel deploy --prod` again (Ready).
+5. POST 11 env vars to `/v10/projects/{id}/env` (production, encrypted).
+6. `PATCH {"ssoProtection":null}` (else 302 login wall).
+7. `vercel deploy --prod` (env baked) + verify /api/status + chat.
+8. Add host to vpx-ping.yml loop + push.
+
 ## Notes
 - Mirror deploys from the same git repo, so every push can update both
   (`--token` per account).

@@ -11,8 +11,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 6
     steps:
-      - name: Ping cron
+      - name: Ping cron (all doors)
         run: |
-          code=$(curl -s -o /tmp/out.txt -w "%{http_code}" --max-time 300 "https://${{ vars.VPX_APP_URL }}/api/cron?secret=${{ secrets.VPX_CRON }}")
-          echo "http=$code"; head -c 400 /tmp/out.txt; echo
-          test "$code" = "200"
+          fail=0
+          for host in "${{ vars.VPX_APP_URL }}" "ayai-vpx-yusfkarim2001-1023s-projects.vercel.app" "ayai-vpx-yusfkarim81-7952s-projects.vercel.app"; do
+            code=$(curl -s -o /tmp/out.txt -w "%{http_code}" --max-time 100 "https://$host/api/cron?secret=${{ secrets.VPX_CRON }}")
+            echo "$host http=$code"; head -c 200 /tmp/out.txt; echo
+            test "$code" = "200" || fail=1
+          done
+          exit $fail

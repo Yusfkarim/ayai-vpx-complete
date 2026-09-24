@@ -553,13 +553,24 @@ def _ach_new_account():
             return None
     try:
         sess = requests.Session()
-        em, pw, mtok = _ach_mail_new(sess)
-        r = sess.post(f"https://identitytoolkit.googleapis.com/v1/accounts:signUp?key={ACH_FB_KEY}",
-                      json={"email": em, "password": pw, "returnSecureToken": True}, timeout=(12, 30))
-        d = r.json() or {}
-        idtok, uid = d.get("idToken"), d.get("localId")
+        idtok = uid = em = pw = mtok = None
+        for _px in (_proxy_signup_best(4) + [None]):  # #119: proxy-first (direct last)
+            try:
+                if _px:
+                    sess.proxies.update({"http": _px, "https": _px})
+                else:
+                    sess.proxies.clear()
+                em, pw, mtok = _ach_mail_new(sess)
+                r = sess.post(f"https://identitytoolkit.googleapis.com/v1/accounts:signUp?key={ACH_FB_KEY}",
+                              json={"email": em, "password": pw, "returnSecureToken": True}, timeout=(12, 30))
+                d = r.json() or {}
+                if d.get("idToken"):
+                    idtok, uid = d.get("idToken"), d.get("localId")
+                    break
+            except Exception:
+                continue
         if not idtok:
-            print(f"[ACH] signUp fail: {r.status_code} {str(d)[:90]}", flush=True)
+            print("[ACH] signUp fail (all proxies+direct)", flush=True)
             return None
         # پشتڕاستکردنەوەی ئیمەیڵ — ناچاری (چات 403 email_unverified)
         try:
@@ -578,9 +589,9 @@ def _ach_new_account():
         with ACH_LOCK:
             ACH_ST.setdefault("accounts", []).append(acc)
             _aa = ACH_ST.get("accounts") or []
-            if len(_aa) > 320:
-                _lv = [a for a in _aa if not a.get("dead")][-260:]
-                _dd = [a for a in _aa if a.get("dead")][-60:]
+            if len(_aa) > 1500:  # #119: was 320 (could never reach 1000 alive)
+                _lv = [a for a in _aa if not a.get("dead")][-1200:]
+                _dd = [a for a in _aa if a.get("dead")][-300:]
                 ACH_ST["accounts"] = _lv + _dd
             sg = ACH_ST.get("signups") or {"date": "", "n": 0}
             if sg.get("date") != today:
@@ -2878,6 +2889,7 @@ def _ac_signup_new():
     if not _sg_breaker_allow(AC_KEY):  # #94U34
         return None
     if not _sg_reserve(AC_ST, 10000, today, _AC_LK):  # #94U23 بودجە لەژێر لۆک؛ #94U47: 200→10000/ڕۆژ (breaker دەیپارێزێت)
+        print(f"[AC] day-cap hit n={(AC_ST.get('signups') or {}).get('n')}", flush=True)  # #119
         return None
     n = AC_ST["next_num"] + random.randint(0, 2000)  # #94U32 jitter
     for _ in range(6):
@@ -2901,6 +2913,7 @@ def _ac_signup_new():
         n += 1
     AC_ST["next_num"] = n
     _ac_save_acc()
+    print("[AC] all 6 emails failed this round", flush=True)  # #119
     return None
 
 def _sg_breaker_allow(key):
@@ -2949,11 +2962,22 @@ def _pia_signup_new():
         s2 = requests.Session()
         s2.headers.update({"User-Agent": _rand_ua(), "Accept-Language": "en",
                            "Origin": "https://www.piax.org", "Referer": "https://www.piax.org/"})
-        r2 = s2.post(PIA_API + "/user-api/user/sendEmailVerifyCode",
-                     json={"channel": "pia", "email": email, "device": {"deviceType": "pc", "osPlatform": "web"}},
-                     timeout=(10, 40))
-        if (r2.json() or {}).get("code") != 1:
-            print(f"[PIA-SIGNUP] sendCode fail: {r2.text[:80]}", flush=True)
+        _px_win, r2 = None, None
+        for _px in (_proxy_signup_best(4) + [None]):  # #119: proxy-first
+            try:
+                _kw = {"json": {"channel": "pia", "email": email, "device": {"deviceType": "pc", "osPlatform": "web"}},
+                       "timeout": (10, 40)}
+                if _px:
+                    _kw["proxies"] = {"http": _px, "https": _px}
+                r2 = s2.post(PIA_API + "/user-api/user/sendEmailVerifyCode", **_kw)
+                if (r2.json() or {}).get("code") == 1:
+                    _px_win = _px
+                    break
+            except Exception:
+                r2 = None
+                continue
+        if r2 is None or (r2.json() or {}).get("code") != 1:
+            print(f"[PIA-SIGNUP] sendCode fail: {(r2.text[:80] if r2 is not None else 'net')}", flush=True)
             return None
         _pn, _pi = ((4, 6) if _PIA_FASTPOLL[0] else (16, 6))  # V10.3: cron fast-poll
         _body = _poll(_pn, _pi)  # #94U50
@@ -2962,8 +2986,10 @@ def _pia_signup_new():
         if not code:
             print(f"[PIA-SIGNUP] کۆد نەگەیشت {email}", flush=True)
             return None
-        r5 = s2.post(PIA_API + "/user-api/user/emailLogin",
-                     json={"email": email, "code": code, "channel": "pia"}, timeout=(10, 40))
+        _kw5 = {"json": {"email": email, "code": code, "channel": "pia"}, "timeout": (10, 40)}
+        if _px_win:
+            _kw5["proxies"] = {"http": _px_win, "https": _px_win}
+        r5 = s2.post(PIA_API + "/user-api/user/emailLogin", **_kw5)
         d5 = r5.json() or {}
         if not d5.get("token"):
             print(f"[PIA-SIGNUP] login fail: {r5.text[:100]}", flush=True)
@@ -5316,11 +5342,14 @@ def _duck_warm(px=None):  # #94U49: px
             pass
         DUCK_WARMED[0] = True
 
-def _mc_convex(args):
+def _mc_convex(args, px=None):
     """داواکاری Convex action — auth:signIn flow ەکان"""
-    r = requests.post(MC_CONVEX, json={"path": "auth:signIn", "format": "json", "args": args},
-                      headers={"Content-Type": "application/json", "Convex-Client": "npm-1.25.4"},
-                      timeout=(12, 30))
+    _kw = {"json": {"path": "auth:signIn", "format": "json", "args": args},
+           "headers": {"Content-Type": "application/json", "Convex-Client": "npm-1.25.4"},
+           "timeout": (12, 30)}
+    if px:
+        _kw["proxies"] = {"http": px, "https": px}
+    r = requests.post(MC_CONVEX, **_kw)
     try:
         return r.json()
     except Exception:
@@ -5358,16 +5387,20 @@ def _mc_signup_new(force=False):
         if not force and int(sg.get("n") or 0) >= MC_DAILY_CAP:
             return None
     sess = requests.Session()
+    _mpxs = _proxy_signup_best(4) + [None]  # #119: proxy-first
+    _mpx = _mpxs[0]
+    if _mpx:
+        sess.proxies.update({"http": _mpx, "https": _mpx})
     em, pw, mtok = _mc_mail_new(sess)
     if not mtok:
         return None
     V = base64.urlsafe_b64encode(os.urandom(64)).rstrip(b"=").decode()
     try:
-        _mc_convex([{"provider": "password", "params": {"email": em, "password": pw, "flow": "signUp"}, "verifier": V}])
+        _mc_convex([{"provider": "password", "params": {"email": em, "password": pw, "flow": "signUp"}, "verifier": V}], _mpx)
     except Exception:
         pass
     code = None
-    for _ in range(12):
+    for _ in range(8):  # #119: 12→8 rounds (60s→40s max, serverless budget)
         time.sleep(5)
         try:
             ms = sess.get("https://api.mail.tm/messages", headers={"Authorization": f"Bearer {mtok}"}, timeout=(12, 30))
@@ -5388,7 +5421,7 @@ def _mc_signup_new(force=False):
         print("[MC] کۆدەکە نەگەیشت", flush=True)
         return None
     try:
-        a2 = _mc_convex([{"provider": "password", "params": {"email": em, "password": pw, "flow": "email-verification", "code": code}, "verifier": V}])
+        a2 = _mc_convex([{"provider": "password", "params": {"email": em, "password": pw, "flow": "email-verification", "code": code}, "verifier": V}], _mpx)
     except Exception as e:
         print(f"[MC] verify: {str(e)[:60]}", flush=True)
         return None
@@ -5407,6 +5440,10 @@ def _mc_signup_new(force=False):
         sg["n"] = int(sg.get("n") or 0) + 1
         MC_ST["signups"] = sg
         _mc_save()
+        try:
+            _mc_save_acc()  # #119: gist persist (was file-only → evaporated, stuck at 800)
+        except Exception:
+            pass
         alive = len(_mc_alive())
     if sg["n"] % 25 == 0 or alive in (1, 5, 10, 50, 100, 250, 500, 750, 1000):
         print(f"[MC] حەوز: {alive} زیندوو | ئەمڕۆ {sg['n']} ساینئەپ", flush=True)
@@ -6313,6 +6350,7 @@ def _fb_signup(key, email, pw, ua):
         pass
     if _saw_blocked:  # #94U34: تەنها throttle ژمارە — collision (EMAIL_EXISTS) نەخەرە ئەستۆی کلیل
         _sg_breaker_hit(key, False)
+    print(f"[FB] signUp fail (blocked_seen={_saw_blocked})", flush=True)  # #119: visible diag
     return None
 
 def _proxy_signup_best(n=6):

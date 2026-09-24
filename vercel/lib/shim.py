@@ -43,7 +43,7 @@ def install(R):
         "web": "\n\n(تکایە بە دوایین زانیاری و سەرچاوەی تازە لە ئینتەرنێت وەڵام بدەوە)",
     }
     R.ACH_BUDGET = 3
-    R.ACH_DAY_CAP = 250
+    R.ACH_DAY_CAP = 500  # #119: 250→500 (fill 1000 in ~2d once proxy-fixed)
     R.ACH_FB_KEY = os.environ.get("ACH_FB_KEY") or ""
     R.ACH_ST = {}
     R.ACH_LOCK = threading.Lock()

@@ -93,6 +93,19 @@ class handler(BaseHTTPRequestHandler):
         left = lambda: budget - (time.time() - t0)
         # every run maintains everything (only 2 runs/day on Hobby) — each stage
         # is budget-guarded + flushed, so a 60s kill never loses progress
+        if _n % 4 == 0:
+            # #119: MC top-up (heavy ~40s signup; overlap lock keeps 1 door running it)
+            try:
+                providers._seed_load()
+                _mc_n = len(providers.R._mc_alive())
+                if _mc_n < 1000 and left() > 20:
+                    out["mint_mc"] = {"ok": bool(providers.R._mc_signup_new()),
+                                      "total": len(providers.R._mc_alive())}
+                else:
+                    out["mint_mc"] = {"skipped": "full-or-busy", "total": _mc_n}
+            except Exception as e:
+                out["mint_mc"] = {"err": str(e)[:60]}
+            self._flush_if_slow(t0)
         if left() > 30:
             try:
                 out["sync"] = providers.sync_all(budget_s=min(10, left() - 16))

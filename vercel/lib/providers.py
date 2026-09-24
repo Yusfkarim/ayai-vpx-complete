@@ -162,6 +162,13 @@ def _seed_load():
             st.setdefault("idx", 0)
         except Exception:
             pass
+    try:  # #119: cold instances have empty proxy mem → proxy-first silently degrades to direct
+        _pxs = kv.kv_jget("vpx:px") or []
+        _pool = R.PROXY_ST.setdefault("pool", {})
+        for _p in _pxs[:200]:
+            _pool.setdefault(_p, {"t": time.time(), "lat": 9})
+    except Exception:
+        pass
 
 def _mk_saver(name):
     key = "vpx:poolstate:" + name
@@ -932,6 +939,12 @@ def harvest_proxies(max_keep=60, deadline=150):
         except Exception:
             pass
         kv.kv_jset("vpx:px", good[:max_keep])
+        try:  # #119: also warm local mem (cold-instance proxy-first)
+            _pool = R.PROXY_ST.setdefault("pool", {})
+            for _g in good[:max_keep]:
+                _pool.setdefault(_g, {"t": time.time(), "lat": 9})
+        except Exception:
+            pass
     return {"proxies": len(good), "tested": len(cands)}
 
 
@@ -1038,7 +1051,8 @@ def cron_slice():
                 for _pn in ("ac", "al", "alle", "pia"):
                     try:
                         _st = getattr(R, _pn.upper() + "_ST")
-                        if len(_st.get("accounts") or []) < 1000:
+                        _tgt = 2000 if _pn == "ac" else 1000  # #119: ac ceiling 2000
+                        if len(_st.get("accounts") or []) < _tgt:
                             getattr(R, "_" + _pn + "_signup_new")()
                     except Exception:
                         pass
@@ -1379,7 +1393,7 @@ def topup_all(budget_s=150):
                 out[name] = {"minted": 0, "total": n}
         except Exception as ex:
             out[name] = {"err": str(ex)[:60]}
-    for name in ("ac", "alle", "pia"):
+    for name in ("ac", "al", "alle", "pia"):
         if time.time() - t0 > budget_s:
             break
         try:
@@ -1387,7 +1401,9 @@ def topup_all(budget_s=150):
             _seed_load()
             n = len((getattr(R, name.upper() + "_ST").get("accounts") or []))
             made = 0
-            for _ in range(min(max(0, 1000 - n), 25)):
+            _tgt = 2000 if name == "ac" else 1000  # #119: ac ceiling 2000
+            _per = 40 if name == "ac" else 25
+            for _ in range(min(max(0, _tgt - n), _per)):
                 if time.time() - t0 > budget_s:
                     break
                 try:

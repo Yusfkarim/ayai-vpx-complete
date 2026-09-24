@@ -5355,6 +5355,20 @@ def _mc_convex(args, px=None):
     except Exception:
         return {}
 
+
+def _mc_convex_dual(args, px):
+    """#119b: convex via proxy, direct retry (proxies often bot-walled)"""
+    try:
+        r = _mc_convex(args, px)
+        if isinstance(r, dict) and r.get("status") == "success":
+            return r
+    except Exception:
+        r = {}
+    try:
+        return _mc_convex(args)
+    except Exception:
+        return r
+
 def _mc_token(acc):
     """توکنی دروست — JWT ی ١ کاتژمێر: نوێکردنەوە پێش بەسەڕچوون"""
     tok = acc.get("tok") or ""
@@ -5392,15 +5406,35 @@ def _mc_signup_new(force=False):
     if _mpx:
         sess.proxies.update({"http": _mpx, "https": _mpx})
     em, pw, mtok = _mc_mail_new(sess)
+    if not mtok:  # #119b: proxy may break mail.tm → one direct retry
+        try:
+            sess.proxies.clear()
+        except Exception:
+            pass
+        _mpx = None
+        em, pw, mtok = _mc_mail_new(sess)
     if not mtok:
         return None
     V = base64.urlsafe_b64encode(os.urandom(64)).rstrip(b"=").decode()
     try:
-        _mc_convex([{"provider": "password", "params": {"email": em, "password": pw, "flow": "signUp"}, "verifier": V}], _mpx)
+        _mc_convex_dual([{"provider": "password", "params": {"email": em, "password": pw, "flow": "signUp"}, "verifier": V}], _mpx)
     except Exception:
         pass
     code = None
-    for _ in range(8):  # #119: 12→8 rounds (60s→40s max, serverless budget)
+    _rounds = 8
+    if isinstance(mtok, str) and mtok.startswith("guerr:"):  # #119: guerrilla inbox
+        _gsid = mtok.split(":", 1)[1]
+        for _ in range(8):
+            time.sleep(5)
+            _gm = re.search(r"\b(\d{8})\b", _guerr_body(_gsid) or "")
+            if _gm:
+                code = _gm.group(1)
+                break
+        _rounds = 0  # skip mail.tm loop below
+        if not code:
+            print("[MC] guerrilla code timeout", flush=True)
+            return None
+    for _ in range(_rounds):  # mail.tm wait (skipped for guerrilla)
         time.sleep(5)
         try:
             ms = sess.get("https://api.mail.tm/messages", headers={"Authorization": f"Bearer {mtok}"}, timeout=(12, 30))
@@ -5421,7 +5455,7 @@ def _mc_signup_new(force=False):
         print("[MC] کۆدەکە نەگەیشت", flush=True)
         return None
     try:
-        a2 = _mc_convex([{"provider": "password", "params": {"email": em, "password": pw, "flow": "email-verification", "code": code}, "verifier": V}], _mpx)
+        a2 = _mc_convex_dual([{"provider": "password", "params": {"email": em, "password": pw, "flow": "email-verification", "code": code}, "verifier": V}], _mpx)
     except Exception as e:
         print(f"[MC] verify: {str(e)[:60]}", flush=True)
         return None
@@ -5467,6 +5501,13 @@ def _mc_mail_new(sess):
             if i == 2:
                 print(f"[MC] mail: {str(e)[:70]}", flush=True)
             time.sleep(5)
+    try:  # #119: mail.tm failed → guerrilla fallback (proven by ach)
+        em1, sid1 = _guerr_new()
+        if em1:
+            print(f"[MC] mail: guerrilla fallback ✅ {em1[:20]}", flush=True)
+            return em1, pw, "guerr:" + sid1
+    except Exception:
+        pass
     return em, pw, None
 
 def _proxy_check(pxs, cap=18):

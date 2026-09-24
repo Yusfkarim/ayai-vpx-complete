@@ -1,8 +1,6 @@
-PySocks
-cryptography
-curl_cffi
-json5
-playwright
-py-mini-racer
 requests
-websocket-client
+cryptography
+py-mini-racer
+json5
+curl_cffi
+playwright

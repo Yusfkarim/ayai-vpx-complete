@@ -1050,3 +1050,36 @@
 ## #96U2 (2026-09-22) — boot audit 🛡️
 - _audit_dispatch95: لە boot هەموو 32 فەنکشنی dispatch دەپشکنێت (ئەگەر rename/break → ❌ لە لۆگ)
 - test: هەموو هەن → 32/32 ✅، gz_chat لابرا → ❌ شکاو ✅
+
+## #96U3→#100c (other session — summaries from git log, FIX_LOG wasn't maintained)
+- 96cf9cc #100c: EXPOSE 8080 in free Dockerfile (for free-host deploys)
+- 9b0f9ec #100b: add free-host files (Dockerfile.free, requirements.free, GHA minter workflow)
+- 83809c2 #100b: free-host kit — Dockerfile.free (no browser), GHA mc-minter (30min cron → data branch), /data git-sync daemon, MC_MINT_OFF
+- fce7213 #99: GCP e2-micro one-paste installer (docker + TG-backup restore)
+- 9dc923a #98b: mc pool in stats-cache daemon
+- 04a5b15 #98: MultiChats pool — 7 free models + x-is-human minter (playwright in-process) + >1000-account daemon
+- f1ca198 #97h2: memory 1gb — boot storm (alle mint x3 + proxy harvest + node clients parallel) blows 512MB at ~90s post-boot
+- 009e91c #97h: bot-down root-cause — boot blockers (setup_commands + cbox seed + api_brain_ensure in /health//v1/models) moved to background threads; early faulthandler watchdog pre-poll (240s->420s); fly.toml 512mb restored
+- 1f9f222 #97g: ach-web — forceWebSearch → NEWS_RESEARCH/perplexity-sonar with real sources (31 srcs verified), sources appended as links to answer; 8th AllChat server
+- d9eb6e6 #97f: targeted premium steering — ach-code (GPT-5-mini+Gemini-2.5-Flash), ach-math (GPT-5-mini+DeepSeek-v3), ach-deep (GPT-5-mini/Gemini-3-Flash) via category-specific COMPLEX wraps (all verified live); SmartRoute set ACH_SMART
+- 120e603 #97e: restore fly.toml 512mb (was lost in 1bdf333 push — prevents crash-loop regression on next deploy)
+- 1bdf333 #97d: premium consensus crack — SmartRoute COMPLEX-force wrapper → free tier gets GPT-5-mini + Gemini-3-Flash/2.5-Flash/DeepSeek-v3 multi-model (modelResponses verified); budget 3, consensus timeout 170s, model-usage logging
+- f147a24 #97c fix: remove duplicate 256mb line
+- 7bb782f #97c: fly.toml memory 512mb — root-cause OOM crash-loop on boot detect_brain (256MB exhausted at 13.3K lines)
+- 640cd01 #97b: OOM-safety — ach seed delayed 150s (after boot/detect_brain peak), daemon first cycle at 300s — 256MB machine crash-loop fix
+- 4e8e3fa #97: AllChat source (app.askallchat.com) — Firebase auth crack end-to-end (mail.tm → signUp → oobCode verify → signIn) + consensus SmartRoute (multi-model) + 3 free models + account pool/rotation/daemon + XARQ/failover cbox fall-through fix
+- 0d7c07e #96U7: self-check off the /health hot path — background trigger (>600s stale), prevents self-ping false-crash during heavy em gold probes
+- 22d82fd #96U6b: EM_RES_URL hook — user-provided residential proxy list auto-prepended to gold candidates
+- 954f45e #96U6: EM gold-pipeline — full-chat validation probes, gold-only self-check, _em_gold_daemon (8min hunt + dawn reset), OOM-guard 3-parallel
+- bb39434 #96U5b: EM — residential proxies first (private IPs rarely quota-burned), wider harvest 30cand/8par/8keep
+- 05bb723 #96U5: EM revive — easemate via validated public proxies (CF 403 on Fly IPs); _em_proxy_reap_daemon ≥4 proxies/15min; 403-channel breaker
+- a5845f3 #96U4b: crash-loop fix re-applied — pool-stats background cache daemon, health no per-request decrypt, watchdog 90→240s, audit delayed 45s
+- ba1bb87 #96U4: fix crash-loop — background pool-stats cache (no per-request decrypt), watchdog 90→240s, delayed audit
+- 52d2220 #96U3: LORKA source (app.lorka.ai) — better-auth anonymous sessions → gpt-5.4-nano SSE, session-per-request, history-in-request, wired: brain/dispatch/probes/chaos/warm/api+tg chains
+
+## #101 (2026-09-23) — Vercel API V1 (KV-only, ZERO Fly) + FIX_LOG restore
+- vercel/ package نوێ: chat (pol/aff/lr/gz/ach) + auto-mint (CA/CB/NV Firebase + ACH full-cycle) → KV + cron + OpenAI-compat
+- ported ~1000L (AST-extract, 6 rounds) + shim + KV overrides؛ tests: 9/9 ✅ + ach mint+chat ✅ + harvest ✅
+- gz-chat: login-wall/conn لە sandbox (fresh memory + DC-IP) → fallback covers؛ V2: pool-CHAT + gz warmup + duck + stream
+- FIX_LOG restored from 7707b2f (1052L) — #96U5 stale-overwrite undone
+- deploy: vercel/VERCEL_DEPLOY.md (Root Directory=vercel, KV connect, env, Hobby cron + GHA-ping trick)

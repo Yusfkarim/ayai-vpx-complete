@@ -13,40 +13,6 @@ const SECRET = '^wqZ*7@*2zTd2vcqPC9YWYgbwpq4dm&ZF9cQxpckt3Vge%';
 const FE_VERSION = "1.0.4-release.202512191850";
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36";
 
-// #94U49: پشتگیری پرۆکسی (AK_PROXY env) — بۆ لیمێتی IP
-// #94U53: socks via node-fetch (undici ProxyAgent socks ناکات)
-let _nf = null, _nfAgent = null;
-if (process.env.AK_PROXY) {
-  if (process.env.AK_PROXY.startsWith('socks')) {
-    try {
-      _nf = (await import('node-fetch')).default;
-      const { SocksProxyAgent } = await import('socks-proxy-agent');
-      _nfAgent = new SocksProxyAgent(process.env.AK_PROXY);
-    } catch (e) { console.error('[ak] socks load fail:', e.message); }
-  } else {
-    try {
-      const { ProxyAgent, setGlobalDispatcher } = await import('undici');
-      setGlobalDispatcher(new ProxyAgent(process.env.AK_PROXY));
-    } catch (e) { console.error('[ak] proxy load fail:', e.message); }
-  }
-}
-async function pfetch(url, opts = {}) {
-  if (!_nf || !_nfAgent) return fetch(url, opts);
-  const r = await _nf(url, { ...opts, agent: _nfAgent });
-  if (r.body && typeof r.body.getReader !== 'function') {
-    try {
-      const { Readable } = await import('node:stream');
-      const web = Readable.toWeb(r.body);
-      return new Proxy(r, { get(t, p) {
-        if (p === 'body') return web;
-        const v = t[p];
-        return typeof v === 'function' ? v.bind(t) : v;
-      }});
-    } catch { return r; }
-  }
-  return r;
-}
-
 function sign(body) {
   const ts = Date.now();
   const bh = objectHash(JSON.parse(JSON.stringify(body)), {
@@ -78,7 +44,7 @@ async function anakinChat(appId, modelId, content, messages = [], prompt = "", t
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
-    const r = await pfetch(`https://api.anakin.ai/api/v1/workspaces/0/apps/${appId}/draft-conversation-messages?locale=en-US`, {
+    const r = await fetch(`https://api.anakin.ai/api/v1/workspaces/0/apps/${appId}/draft-conversation-messages?locale=en-US`, {
       method: "POST",
       signal: ctrl.signal,
       headers: {

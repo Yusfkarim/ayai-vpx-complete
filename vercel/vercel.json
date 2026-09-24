@@ -1,0 +1,39 @@
+{
+  "functions": {
+    "api/*.py": {
+      "maxDuration": 300
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/",
+      "destination": "/api/dash"
+    },
+    {
+      "source": "/playground",
+      "destination": "/api/playground"
+    },
+    {
+      "source": "/v1/chat/completions",
+      "destination": "/api/chat"
+    },
+    {
+      "source": "/v1/models",
+      "destination": "/api/models"
+    },
+    {
+      "source": "/api/status",
+      "destination": "/api/status"
+    }
+  ],
+  "crons": [
+    {
+      "path": "/api/cron",
+      "schedule": "7 2 * * *"
+    },
+    {
+      "path": "/api/cron",
+      "schedule": "37 14 * * *"
+    }
+  ]
+}

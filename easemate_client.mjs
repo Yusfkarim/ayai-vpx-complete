@@ -43,43 +43,11 @@ let VISITOR_ID = randomUUID();
 if (process.env.EM_FRESH_ID === '1') VISITOR_ID = randomUUID();
 
 // #87: پشتگیری پرۆکسی (EM_PROXY env) — بۆ بلۆکی IP
-// #94U53: socks via node-fetch (undici ProxyAgent socks ناکات)
-let _nf = null, _nfAgent = null;
 if (process.env.EM_PROXY) {
-  if (process.env.EM_PROXY.startsWith('socks')) {
-    try {
-      _nf = (await import('node-fetch')).default;
-      const { SocksProxyAgent } = await import('socks-proxy-agent');
-      _nfAgent = new SocksProxyAgent(process.env.EM_PROXY);
-    } catch (e) { console.error('[em] socks load fail:', e.message); }
-  } else {
-    try {
-      const { ProxyAgent, setGlobalDispatcher } = await import('undici');
-      setGlobalDispatcher(new ProxyAgent(process.env.EM_PROXY));
-    } catch (e) { console.error('[em] proxy load fail:', e.message); }
-  }
-}
-if (!process.env.EM_PROXY && process.env.EM_FAMILY === '6') {  // #94U63: IPv6 direct (کەناڵی کوانتای جیاواز ✅ سەلمێنرا)
   try {
-    const { Agent, setGlobalDispatcher } = await import('undici');
-    setGlobalDispatcher(new Agent({ connect: { family: 6, timeout: 10000 } }));
-  } catch (e) { console.error('[em] v6 fail:', e.message); }
-}
-async function pfetch(url, opts = {}) {
-  if (!_nf || !_nfAgent) return fetch(url, opts);
-  const r = await _nf(url, { ...opts, agent: _nfAgent });
-  if (r.body && typeof r.body.getReader !== 'function') {
-    try {
-      const { Readable } = await import('node:stream');
-      const web = Readable.toWeb(r.body);
-      return new Proxy(r, { get(t, p) {
-        if (p === 'body') return web;
-        const v = t[p];
-        return typeof v === 'function' ? v.bind(t) : v;
-      }});
-    } catch { return r; }
-  }
-  return r;
+    const { ProxyAgent, setGlobalDispatcher } = await import('undici');
+    setGlobalDispatcher(new ProxyAgent(process.env.EM_PROXY));
+  } catch (e) { console.error('[em] proxy load fail:', e.message); }
 }
 const seed = JSON.stringify({
   modelId: 6, modelName: 'Gemini 3.1 Flash Lite', configVersion: 2,
@@ -163,7 +131,7 @@ async function getSigns(payload) {
 let IID = null;
 
 function baseHeaders() {
-  const h = {
+  return {
     'client-type': 'web', 'client-name': 'chatpdf', 'product-code': '888',
     'device-identifier': VISITOR_ID, 'device-uuid': VISITOR_ID,
     'device-type': 'web', 'device-platform': '',
@@ -171,8 +139,6 @@ function baseHeaders() {
     'Origin': 'https://www.easemate.ai', 'Referer': 'https://www.easemate.ai/',
     'User-Agent': UA, 'content-type': 'application/json;charset=UTF-8',
   };
-  if (process.env.EM_TOKEN) h['Authorization'] = 'Bearer ' + process.env.EM_TOKEN;  // #94U63: pool accounts
-  return h;
 }
 
 async function post(path, body, timeoutMs = 30000) {
@@ -183,7 +149,7 @@ async function post(path, body, timeoutMs = 30000) {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
-    return await pfetch(API + path, { method: 'POST', headers: h, body: JSON.stringify(body), signal: ctrl.signal });
+    return await fetch(API + path, { method: 'POST', headers: h, body: JSON.stringify(body), signal: ctrl.signal });
   } finally { clearTimeout(t); }
 }
 
@@ -240,31 +206,7 @@ async function listModels() {
   emit({ ok: true, models: out });
 }
 
-async function permMode() {
-  await getIdentity();
-  try {
-    const r = await post('/api2/task/query_permission', {});
-    const j = await r.json().catch(() => ({}));
-    emit({ ok: true, perm: j?.data || null, code: j?.code });
-  } catch (e) {
-    emit({ ok: false, error: String(e && e.message || e).slice(0, 100) });
-  }
-}
-
-async function signinMode() {
-  await getIdentity();
-  try {
-    const r = await post('/api2/task/signin', {});  // #96U1: sign+timeout+pfetch یەکگرتوو
-    const j = await r.json().catch(() => ({}));
-    emit({ ok: true, signin: j, code: j?.code });
-  } catch (e) {
-    emit({ ok: false, error: String(e && e.message || e).slice(0, 100) });
-  }
-}
-
 async function main() {
-  if (process.argv[2] === 'signin') return signinMode();
-  if (process.argv[2] === 'perm') return permMode();
   if (process.argv[2] === 'models') return listModels();
   let input = '';
   for await (const d of process.stdin) input += d;
@@ -293,11 +235,11 @@ async function main() {
   h['Cache-Control'] = 'no-cache';
 
   const ctrl = new AbortController();
-  const kill = setTimeout(() => ctrl.abort(), 60000); // #94U59: 150→60s
+  const kill = setTimeout(() => ctrl.abort(), 150000);
   let full = '';
   let lastErr = null;
   try {
-    const res = await pfetch(API + '/api2/stream/exec_operation', {
+    const res = await fetch(API + '/api2/stream/exec_operation', {
       method: 'POST', headers: h, body: JSON.stringify(body), signal: ctrl.signal,
     });
     if (!res.ok) {
@@ -391,7 +333,7 @@ async function main() {
       const h2 = baseHeaders();
       h2['sign'] = s2; h2['timestamp'] = t2; h2['identity-id'] = IID;
       h2['Accept'] = 'text/event-stream'; h2['Cache-Control'] = 'no-cache';
-      const res2 = await pfetch(API + '/api2/stream/exec_operation', { method: 'POST', headers: h2, body: JSON.stringify(body2) });
+      const res2 = await fetch(API + '/api2/stream/exec_operation', { method: 'POST', headers: h2, body: JSON.stringify(body2) });
       let full2 = '';
       if (res2.ok && (res2.headers.get('content-type') || '').includes('event-stream')) {
         const reader2 = res2.body.getReader();

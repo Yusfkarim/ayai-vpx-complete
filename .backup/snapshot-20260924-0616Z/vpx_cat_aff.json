@@ -1,0 +1,1 @@
+{"t": 1790230580.9585414, "items": [{"id": "aff-gpt-5", "model": "gpt-5", "endpoint": "/api/generate-ai-answer"}, {"id": "aff-deepseek-v4-flash", "model": "deepseek-v4-flash", "endpoint": "/api/generate-ai-answer-deepseek"}]}

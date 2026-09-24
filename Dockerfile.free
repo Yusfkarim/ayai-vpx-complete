@@ -1,0 +1,13 @@
+# #100b: FREE-host variant — no browser, no node; minter offloaded to GitHub Actions
+FROM python:3.11-slim
+WORKDIR /app
+RUN apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/*
+COPY requirements.free.txt .
+RUN pip install --no-cache-dir -r requirements.free.txt
+COPY main.py model_sync.json README.md ./
+COPY easemate_client.mjs easemate_sign.wasm anakin_client.mjs anakin_objecthash.js deepai_client.mjs ./
+# #101b: pool data embedded for free hosts (DATA_DIR falls back to /app)
+COPY datafiles/ ./
+ENV PYTHONUNBUFFERED=1 MC_MINT_OFF=1
+EXPOSE 8080
+CMD ["python3", "-u", "main.py"]

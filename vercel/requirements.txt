@@ -1,0 +1,5 @@
+requests>=2.31
+py_mini_racer
+websocket-client
+curl_cffi
+cryptography

@@ -1,0 +1,15 @@
+AYAI-VPX COMPLETE BACKUP — 2026-09-24 (~02:00Z, Asia/Baghdad)
+Repo: Yusfkarim/ayai-vpx-complete (PRIVATE — keep it private, contains live secrets)
+Code: full git history from ayai-vpx @ V10.6 (91dad9e) + this backup commit on top
+
+Contents of .backup/:
+- snapshot-20260924/   : full GitHub-Gist KV dump (30 files) — ALL pool accounts
+                         (ca/cb/nv/ac/alle/pia/ach), proxies, msync, failctr, cron state
+- BACKUP-SECRETS.env   : master secrets (VAPI_KEY, CRON_SECRET, Appwrite login+key)
+- appwrite-cronping/   : scheduler function source (reconstructed, behavior-verified)
+- MEMORY.md            : full operational memory/notes
+- RESTORE.md           : step-by-step restore guide
+
++ snapshot-20260924-0315Z (28 files): refresh — pia 24→30, ach 31→46, cron_n 40, dashboard #101 live
+
++ snapshot-20260924-0616Z (52 files): code #99-#106, dual schedulers, secrets+AW_KEY2, death-alerts, guerrilla inbox

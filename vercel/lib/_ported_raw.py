@@ -3199,7 +3199,7 @@ def _worm_guest(lines, model_id, timeout):
             kw = {"headers": {"Content-Type": "application/json", "Accept": "application/x-ndjson",
                                        "Origin": "https://wormgpt.cam", "Referer": "https://wormgpt.cam/",
                                        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/120 Safari/537.36"},
-                  "json": {"model": model_id or "free", "messages": lines, "language": "en"},
+                  "json": {"model": model_id or "free", "messages": lines},  # #123g: raw — no language bias
                   "timeout": (10, timeout)}
             if px:
                 kw["proxies"] = {"http": px, "https": px}
@@ -3212,11 +3212,13 @@ def _worm_guest(lines, model_id, timeout):
                     pass
             last = e
             continue
-        if r.status_code in (401, 403):  # #123f: per-transport wall (nginx IP-deny) → cool + next, NOT instant raise
+        if r.status_code in (401, 403):  # #123f: per-transport wall → cool + next; #123g: plan-error (pro/max) → raise, skip transports
             try:
                 msg = (r.json() or {}).get("error") or ""
             except Exception:
                 msg = ""
+            if any(w in msg for w in ("خطت", "plan", "مدفوع", "paid", "402", "اشتر")):
+                raise EMError("worm: پلان")
             try:
                 _cool[_ck] = _now + 3600
             except Exception:
@@ -3244,7 +3246,9 @@ def _worm_guest(lines, model_id, timeout):
                 except Exception:
                     continue
                 if e.get("type") == "error":
-                    _em = str(e.get("error") or "err")[:50]
+                    _em = str(e.get("error") or "err")[:80]
+                    if any(w in _em for w in ("خطت", "plan", "مدفوع", "paid", "402", "اشتر")):  # #123g: pro/max need paid plan
+                        raise EMError("worm: پلان")
                     _el = _em.lower()
                     if e.get("resetsAt") or any(w in _el for w in ("limit", "quota", "exceed", "too many", "busy", "429", "wait", "slow")):
                         try:
@@ -3255,6 +3259,11 @@ def _worm_guest(lines, model_id, timeout):
                         last = EMError("worm-g: %s" % _em)
                         break
                     raise EMError("worm-g: %s" % _em)
+                if not e.get("type") and isinstance(e.get("error"), str):  # #123g: plain {"error":...} (pro/max need paid plan)
+                    _pe = e["error"][:80]
+                    if any(w in _pe.lower() + _pe for w in ("خطت", "plan", "مدفوع", "paid", "402", "اشتراک", "اشتر")):
+                        raise EMError("worm: پلان")
+                    raise EMError("worm-g: %s" % _pe[:50])
                 if e.get("type") == "result":
                     d = e.get("data") or {}
                     if isinstance(d, dict) and d.get("text"):
@@ -3292,20 +3301,14 @@ def _worm_guest(lines, model_id, timeout):
 def worm_chat(messages, model_id="free", timeout=110):
     """#123: WormGPT — guest-first (no key), wgpt v1 fallback when key present."""
     lines = []
-    _sys = []
     for m in _sys_keep(messages, 19):
         role = m.get("role")
         c = (m.get("content") or "").strip()
         if not c:
             continue
         if role == "system":
-            _sys.append(c)  # #123d: worm guest 400s on system role → fold into user
-            continue
+            continue  # #123g: RAW mode — no system prompt at all (no manhaj/KB/tools/fold), user msgs go direct
         lines.append({"role": role if role in ("user", "assistant") else "user", "content": c})
-    if _sys and lines:
-        lines[0]["content"] = "[Context: " + " | ".join(_sys)[:1500] + "]\n" + lines[0]["content"]
-    elif _sys:
-        lines.append({"role": "user", "content": " ".join(_sys)[:2000]})
     if not lines:
         raise EMError("worm: هیچ نامە")
     try:

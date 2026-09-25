@@ -3171,20 +3171,108 @@ def worm_servers():
             {"id": "worm-max", "model_id": "max", "name": "WormGPT Max"}]
 
 
+def _worm_guest(lines, model_id, timeout):
+    """#123b: guest /api/chat (no key — 15+ consecutive OK, NDJSON stream). #123c: proxy rotation (Vercel ASN may be walled like mail.tm)."""
+    try:
+        _pxs = _proxy_get(4) + [None]
+    except Exception:
+        _pxs = [None]
+    last = None
+    for px in _pxs:
+        try:
+            kw = {"headers": {"Content-Type": "application/json", "Accept": "application/x-ndjson",
+                                       "Origin": "https://wormgpt.cam", "Referer": "https://wormgpt.cam/",
+                                       "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/120 Safari/537.36"},
+                  "json": {"model": model_id or "free", "messages": lines, "language": "en"},
+                  "timeout": (10, timeout)}
+            if px:
+                kw["proxies"] = {"http": px, "https": px}
+            r = requests.post("https://wormgpt.cam/api/chat", **kw)
+        except Exception as e:
+            if px:
+                try:
+                    _proxy_mark_bad(px)
+                except Exception:
+                    pass
+            last = e
+            continue
+        if r.status_code in (401, 403):
+            try:
+                msg = (r.json() or {}).get("error") or ""
+            except Exception:
+                msg = ""
+            raise EMError("worm-g: %s" % (msg[:40] or r.status_code))
+        if r.status_code != 200:
+            last = EMError("worm-g: HTTP%d" % r.status_code)
+            continue
+        txt, last_delta = "", ""
+        try:
+            for ln in (r.text or "").splitlines():
+                ln = ln.strip()
+                if not ln.startswith("{"):
+                    continue
+                try:
+                    e = json.loads(ln)
+                except Exception:
+                    continue
+                if e.get("type") == "error":
+                    raise EMError("worm-g: %s" % str(e.get("error") or "err")[:50])
+                if e.get("type") == "result":
+                    d = e.get("data") or {}
+                    if isinstance(d, dict) and d.get("text"):
+                        txt = d["text"]
+                    elif isinstance(d, str):
+                        txt = d
+                elif e.get("type") == "delta" and e.get("text"):
+                    last_delta = e["text"]
+        except EMError:
+            raise
+        except Exception:
+            pass
+        ans = (txt or last_delta or "").strip()
+        if ans:
+            return ans
+        last = EMError("worm-g: بەتاڵ")
+    try:
+        print("[WORM] guest FAIL all transports: %s" % str(last)[:120], flush=True)
+    except Exception:
+        pass
+    raise last if isinstance(last, EMError) else EMError("worm-g: %s" % str(last)[:60])
+
+
 def worm_chat(messages, model_id="free", timeout=110):
-    """#123: WormGPT via OpenAI-compatible v1 + wgpt key."""
+    """#123: WormGPT — guest-first (no key), wgpt v1 fallback when key present."""
     lines = []
+    _sys = []
     for m in _sys_keep(messages, 19):
         role = m.get("role")
         c = (m.get("content") or "").strip()
         if not c:
             continue
-        lines.append({"role": role, "content": c})
+        if role == "system":
+            _sys.append(c)  # #123d: worm guest 400s on system role → fold into user
+            continue
+        lines.append({"role": role if role in ("user", "assistant") else "user", "content": c})
+    if _sys and lines:
+        lines[0]["content"] = "[Context: " + " | ".join(_sys)[:1500] + "]\n" + lines[0]["content"]
+    elif _sys:
+        lines.append({"role": "user", "content": " ".join(_sys)[:2000]})
     if not lines:
         raise EMError("worm: هیچ نامە")
+    try:
+        ans = _worm_guest(lines, model_id, timeout)
+        if ans:
+            return ans
+    except EMError as e:
+        if "پلان" in str(e) or "402" in str(e):
+            pass
+        elif _worm_key():
+            pass  # guest failed but key exists → try v1 below
+        else:
+            raise
     key = _worm_key()
     if not key:
-        raise EMError("worm: هیچ کلیل")
+        raise EMError("worm: guest هەڵە + هیچ کلیل")
     try:
         r = requests.post("https://wormgpt.cam/api/v1/chat/completions",
                           headers={"Authorization": "Bearer " + key, "Content-Type": "application/json",

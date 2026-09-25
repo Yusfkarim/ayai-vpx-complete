@@ -738,13 +738,14 @@ def chat(model_id, messages, timeout=110):
                     break
     except Exception:
         pass
-    order += ["pol-openai", "lr-nano"]
-    try:
-        affs = aff_models()
-        if affs and affs[0]["id"] not in order:
-            order.append(affs[0]["id"])
-    except Exception:
-        pass
+    if not str(model_id).startswith("worm-"):  # #123h: worm = raw-or-nothing (never fall back to prompted models)
+        order += ["pol-openai", "lr-nano"]
+        try:
+            affs = aff_models()
+            if affs and affs[0]["id"] not in order:
+                order.append(affs[0]["id"])
+        except Exception:
+            pass
     last = None
     _t0 = time.time()
     for mid in list(dict.fromkeys(order))[:6]:

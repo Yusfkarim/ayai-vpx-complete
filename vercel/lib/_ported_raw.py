@@ -1465,7 +1465,7 @@ def nv_chat(messages, model_id, timeout=110):
                     _t.sleep(2)
                     continue  # هەمان ئەکاونت دووبارە (بێ rotate، بێ exc+)
                 if acc is not None:
-                    NV_ST.setdefault("exhausted", {})[acc["email"]] = _t.time() + 600  # کۆڵ ١٠ خولەک
+                    NV_ST.setdefault("exhausted", {})[acc["email"]] = _t.time() + 86000  # #120: 600s→24h (like CB)
                     _replace_dead_soon("nv")  # #94U24: لە جێی ئەمە → نوێ یەکسەر
                     NV_ST.setdefault("exc", {})[acc["email"]] = (NV_ST.get("exc") or {}).get(acc["email"], 0) + 3  # #94U37: پشتڕاستکراوە-مردوو (دوای ensure+retry) → skip یەکسەر
                 if not _nv_rotate():
@@ -5524,8 +5524,8 @@ def _proxy_fetch_all():
     urls = [
         "https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/http.txt",
         "https://api.proxyscrape.com/v3/free-proxy-list/get?request=displayproxies&protocol=http&timeout=8000",
-        "https://proxylist.geonode.com/api/proxy-list?limit=500&page=1&sort_by=lastChecked&sort_type=desc&protocols=http%2Chttps&google=true",  # #95U7: google-passed (کەمتر-flagged)
-        "https://proxylist.geonode.com/api/proxy-list?limit=500&page=2&sort_by=lastChecked&sort_type=desc&protocols=http%2Chttps&google=true",  # #95U7
+        "https://proxylist.geonode.com/api/proxy-list?limit=500&page=1&sort_by=lastChecked&sort_type=desc&protocols=http%2Chttps",  # #95U7: google-passed (کەمتر-flagged)
+        "https://proxylist.geonode.com/api/proxy-list?limit=500&page=2&sort_by=lastChecked&sort_type=desc&protocols=http%2Chttps",  # #95U7
         "https://raw.githubusercontent.com/TheSpeedX/PROXY-LIST/master/http.txt",
         "https://raw.githubusercontent.com/ShiftyTR/Proxy-List/master/http.txt",
         "https://raw.githubusercontent.com/zloi-user/hideip.me/main/http.txt",

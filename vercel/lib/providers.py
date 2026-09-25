@@ -831,7 +831,7 @@ def mint_fb_pool(name, count=5, day_cap=2000, absmax=10000):
                     made = r
                     meta_next = n + off + 1
                     break
-                time.sleep(0.5)
+                time.sleep(random.uniform(0.6, 2.2))  # #120: anti-block jitter (was flat 0.5s)
             if made:
                 break
         if made:
@@ -892,45 +892,89 @@ def harvest_proxies(max_keep=60, deadline=150):
     import requests
     t0 = time.time()
     raw = []
-    for u in _PX_URLS:
-        if time.time() - t0 > 40:
-            break
-        try:
-            r = requests.get(u, timeout=(8, 20), headers={"User-Agent": R.UA})
-            if "geonode" in u:
-                for p in (r.json().get("data") or []):
-                    if p.get("ip") and p.get("port"):
-                        raw.append("http://%s:%s" % (p["ip"], p["port"]))
-            else:
-                for ln in (r.text or "").splitlines():
-                    ln = ln.strip()
-                    if re.match(r"^\d+\.\d+\.\d+\.\d+:\d+$", ln):
-                        raw.append("http://" + ln)
-        except Exception:
-            continue
-    cands = list(dict.fromkeys(raw))[:150]
+    try:  # #120: geonode (google-verified tracked as best) + residential hint into mem
+        _now0 = time.time()
+        _best = []
+        for _gp in (1, 2):
+            try:
+                _gr = requests.get(
+                    "https://proxylist.geonode.com/api/proxy-list?limit=500&page=%d&sort_by=lastChecked&sort_type=desc" % _gp,
+                    timeout=(8, 20), headers={"User-Agent": R.UA}).json().get("data") or []
+            except Exception:
+                _gr = []
+            for _p in _gr:
+                if _p.get("ip") and _p.get("port"):
+                    _u = "http://%s:%s" % (_p["ip"], _p["port"])
+                    raw.append(_u)
+                    if _p.get("google"):
+                        _best.append(_u)
+                    _isp = str(_p.get("isp") or _p.get("org") or "").lower()
+                    _res = bool(_isp) and not any(
+                        k in _isp for k in ("host", "cloud", "vps", "server", "dedicat", "datacenter", "colo", "cdn", "proxy"))
+                    try:
+                        R.PROXY_ST.setdefault("pool", {}).setdefault(
+                            _u, {"t": _now0, "lat": 9, "res": _res})
+                    except Exception:
+                        pass
+    except Exception:
+        pass
+    try:  # #120: + the 12-source fetcher (deduped after geonode)
+        for _u2 in (R._proxy_fetch_all() or []):
+            raw.append(_u2 if "://" in str(_u2) else "http://" + str(_u2))
+    except Exception:
+        pass
+    if not raw:  # fallback: original 3 sources
+        for u in _PX_URLS:
+            if time.time() - t0 > 40:
+                break
+            try:
+                r = requests.get(u, timeout=(8, 20), headers={"User-Agent": R.UA})
+                if "geonode" in u:
+                    for p in (r.json().get("data") or []):
+                        if p.get("ip") and p.get("port"):
+                            raw.append("http://%s:%s" % (p["ip"], p["port"]))
+                else:
+                    for ln in (r.text or "").splitlines():
+                        ln = ln.strip()
+                        if re.match(r"^\d+\.\d+\.\d+\.\d+:\d+$", ln):
+                            raw.append("http://" + ln)
+            except Exception:
+                continue
+    _all = list(dict.fromkeys(raw))  # #120: geonode-verified first, then SHUFFLED multi-source sample (one source collapse can't kill harvest)
+    try:
+        _bset = set(dict.fromkeys(_best))
+    except Exception:
+        _bset = set()
+    _rest = [u for u in _all if u not in _bset]
+    random.shuffle(_rest)
+    cands = (sorted(_bset) + _rest)[:400]
     good = []
 
     def _t(px):
-        try:
-            r = requests.get("http://www.google.com/generate_204",
+        try:  # #120: HTTPS check (HTTP-only proxies pass http-check but fail fb/mail/multichats TLS)
+            r = requests.get("https://www.google.com/generate_204",
                              proxies={"http": px, "https": px}, timeout=(5, 8))
             return px if r.status_code in (200, 204) else None
         except Exception:
             return None
 
-    try:
+    try:  # #120: adaptive batches — thin hours test up to 400 (was fixed 150)
         with _cf.ThreadPoolExecutor(max_workers=20) as ex:
-            futs = [ex.submit(_t, px) for px in cands]
-            for f in _cf.as_completed(futs, timeout=max(10, deadline - (time.time() - t0))):
-                try:
-                    r = f.result()
-                except Exception:
-                    r = None
-                if r:
-                    good.append(r)
-                    if len(good) >= max_keep:
-                        break
+            for _bi in range(0, len(cands), 150):
+                if len(good) >= max_keep or time.time() - t0 > deadline + 60:
+                    break
+                if _bi > 0 and len(good) >= 10:
+                    break
+                futs = [ex.submit(_t, px) for px in cands[_bi:_bi + 150]]
+                for f in _cf.as_completed(futs, timeout=max(10, deadline - (time.time() - t0))):
+                    try:
+                        r = f.result()
+                    except Exception:
+                        r = None
+                    if r:
+                        good.append(r)
+                        if len(good) >= max_keep:
+                            break
     except Exception:
         pass
     if good:
@@ -938,7 +982,12 @@ def harvest_proxies(max_keep=60, deadline=150):
             good = R._gz_qualify(good) or good
         except Exception:
             pass
-        kv.kv_jset("vpx:px", good[:max_keep])
+        try:  # #120: UNION with surviving old pool (never collapse 16→2 in thin hours)
+            _old = kv.kv_jget("vpx:px") or []
+            _merged = list(dict.fromkeys((good or []) + [p for p in _old if isinstance(p, str)]))
+        except Exception:
+            _merged = good
+        kv.kv_jset("vpx:px", (_merged or good)[:max(80, max_keep)])
         try:  # #119: also warm local mem (cold-instance proxy-first)
             _pool = R.PROXY_ST.setdefault("pool", {})
             for _g in good[:max_keep]:
@@ -1044,7 +1093,7 @@ def cron_slice():
                 for _pn in ("ca", "cb", "nv"):
                     try:
                         _st = getattr(R, _pn.upper() + "_ST")
-                        if len(_st.get("accounts") or []) < 1000:
+                        if len(_st.get("accounts") or []) < 1000:  # #120: slice guards MINIMUM only (fast chat); 1000→2000 growth rides cron topup (150s budget)
                             mint_fb_pool(_pn, count=3)
                     except Exception:
                         pass
@@ -1167,6 +1216,8 @@ def pool_stats():
             _accs = _st.get("accounts") or []
             _sg = _st.get("signups") or {}
             st[name] = {"n": len(_accs), "today": _sg.get("n", 0) if isinstance(_sg, dict) else 0}
+            if name in ("ca", "cb", "nv"):  # #120: active (non-cooldown) proof
+                st[name]["active"] = _pool_active(name)
         except Exception:
             st[name] = {"n": 0}
     try:
@@ -1341,7 +1392,7 @@ def api_status():
             pools[name] = {"n": n, "alive": alive,
                            "today": sg.get("n", 0) if isinstance(sg, dict) else 0,
                            "minter": MINTER_KIND.get(name, "?"),
-                           "target": 1000 if name not in ("cbox", "aiml") else 1}
+                           "target": 2000 if name in ("ca", "cb", "nv", "ac") else (1 if name in ("cbox", "aiml") else 1000)}
         except Exception:
             pools[name] = {"n": 0, "alive": 0, "minter": MINTER_KIND.get(name, "?")}
     try:
@@ -1378,6 +1429,20 @@ def api_status():
     }
 
 
+def _pool_active(name):
+    """#120: active (non-cooldown) accounts for ca/cb/nv (same source as status alive); total for others."""
+    try:
+        st = getattr(R, name.upper() + "_ST")
+        if name in ("ca", "cb", "nv"):
+            return _pool_alive_count(name, st)
+        return len(st.get("accounts") or [])
+    except Exception:
+        try:
+            return len((getattr(R, name.upper() + "_ST").get("accounts") or []))
+        except Exception:
+            return 0
+
+
 def topup_all(budget_s=150):
     t0 = time.time()
     out = {}
@@ -1386,9 +1451,10 @@ def topup_all(budget_s=150):
             break
         try:
             _seed_load()
-            n = len((getattr(R, name.upper() + "_ST").get("accounts") or []))
-            if n < 1000:
-                out[name] = mint_fb_pool(name, count=min(1000 - n, 60))
+            n = _pool_active(name)
+            if n < 2000:  # #120: 2000 ACTIVE (was 1000 total)
+                out[name] = mint_fb_pool(name, count=min(2000 - n, 60))
+                out[name]["active"] = _pool_active(name)
             else:
                 out[name] = {"minted": 0, "total": n}
         except Exception as ex:
@@ -1403,16 +1469,22 @@ def topup_all(budget_s=150):
             made = 0
             _tgt = 2000 if name == "ac" else 1000  # #119: ac ceiling 2000
             _per = 40 if name == "ac" else 25
+            _fails = 0  # #120: tolerate 2 fails (was break-on-first — mail hiccups killed whole loop)
             for _ in range(min(max(0, _tgt - n), _per)):
                 if time.time() - t0 > budget_s:
                     break
                 try:
                     if fn():
                         made += 1
+                        _fails = 0
                     else:
-                        break
+                        _fails += 1
+                        if _fails >= 3:
+                            break
                 except Exception:
-                    break
+                    _fails += 1
+                    if _fails >= 3:
+                        break
             _seed_load()
             out[name] = {"minted": made,
                          "total": len((getattr(R, name.upper() + "_ST").get("accounts") or []))}

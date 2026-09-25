@@ -1453,7 +1453,7 @@ def topup_all(budget_s=150):
             _seed_load()
             n = _pool_active(name)
             if n < 2000:  # #120: 2000 ACTIVE (was 1000 total)
-                out[name] = mint_fb_pool(name, count=min(2000 - n, 60))
+                out[name] = mint_fb_pool(name, count=min(2000 - n, 20))  # #120b: round-robin 20/pool (was 60-first-pool-starves-rest)
                 out[name]["active"] = _pool_active(name)
             else:
                 out[name] = {"minted": 0, "total": n}

@@ -3171,6 +3171,18 @@ def worm_servers():
             {"id": "worm-max", "model_id": "max", "name": "WormGPT Max"}]
 
 
+_WORM_FA = ("هستم", "هستند", "می‌", " است ", "بخواهی", "می‌خواهی", "خواهی", "نمی‌",
+              " شود ", " کند ", " را ", "چه ", "هست؟", "هستند؟")
+
+
+def _worm_is_fa(t):
+    """#123i: Farsi detection (Sorani often mis-answered in Farsi) — output selection, NO prompt added."""
+    try:
+        return any(w in (t or "") for w in _WORM_FA)
+    except Exception:
+        return False
+
+
 def _worm_guest(lines, model_id, timeout):
     """#123e: guest pool — idx round-robin + per-transport cooldown + chats counter (like ca/cb/cbox)."""
     import time as _t
@@ -3199,7 +3211,7 @@ def _worm_guest(lines, model_id, timeout):
             kw = {"headers": {"Content-Type": "application/json", "Accept": "application/x-ndjson",
                                        "Origin": "https://wormgpt.cam", "Referer": "https://wormgpt.cam/",
                                        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/120 Safari/537.36"},
-                  "json": {"model": model_id or "free", "messages": lines},  # #123g: raw — no language bias
+                  "json": {"model": model_id or "free", "messages": lines, "language": "Kurdish"},  # #123j: Kurdish=75%/try (best of ckb/sorani/ku-Arab); NOT a prompt, site's own selector
                   "timeout": (10, timeout)}
             if px:
                 kw["proxies"] = {"http": px, "https": px}
@@ -3298,6 +3310,189 @@ def _worm_guest(lines, model_id, timeout):
     raise last if isinstance(last, EMError) else EMError("worm-g: %s" % str(last)[:60])
 
 
+def hg_servers():
+    # #124: HackerGPT anon API — default agent free (3 credits/acct); ctf/osint need unlocked acct
+    return [{"id": "hacker-chat", "model_id": "", "name": "HackerGPT"},
+            {"id": "hacker-ctf", "model_id": "ctf", "name": "HackerGPT CTF"},
+            {"id": "hacker-osint", "model_id": "osint", "name": "HackerGPT OSINT"}]
+
+
+def _hg_merge_file():
+    """#124: merge freshly-minted uuids from pooldata/hacker.json (redeploys refill the pool)."""
+    try:
+        import os as _os
+        import json as _js
+        p = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "pooldata", "hacker.json")
+        d = _js.load(open(p))
+        have = set(a.get("uuid") for a in HACKER_ST.get("accounts") or [] if isinstance(a, dict))
+        added = 0
+        for a in d.get("accounts") or []:
+            u = str((a.get("uuid") if isinstance(a, dict) else a) or "").strip()
+            if u and u not in have:
+                HACKER_ST.setdefault("accounts", []).append({"uid": u, "uuid": u, "used": 0})
+                have.add(u)
+                added += 1
+        if added:
+            try:
+                _hacker_save_acc()
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+
+def hg_chat(messages, model_id="", timeout=110):
+    """#124: HackerGPT — POST /api/v1/messages/ + poll; uuid pool rotation (3 credits/acct lifetime)."""
+    import time as _t
+    _hg_merge_file()
+    tool = (model_id or "").strip().lower()
+    if tool not in ("", "ctf", "osint"):
+        tool = ""
+    try:
+        ms = list(messages or [])
+    except Exception:
+        ms = []
+    lines = []
+    if tool:  # tool runs: last user message only
+        for m in reversed(ms):
+            if isinstance(m, dict) and m.get("role") == "user" and (m.get("content") or "").strip():
+                lines = [(m.get("content") or "").strip()]
+                break
+    else:
+        for m in ms:
+            if not isinstance(m, dict):
+                continue
+            c = (m.get("content") or "").strip()
+            if not c:
+                continue
+            r = m.get("role")
+            if r == "system":
+                lines.append("System: " + c)
+            elif r == "assistant":
+                lines.append("Assistant: " + c)
+            else:
+                lines.append("User: " + c)
+        lines = lines[-16:]
+    text = "\n".join(lines).strip()[:6000]
+    if not text:
+        raise EMError("hacker: هیچ نامە")
+    try:
+        _pxs = _proxy_get(4) + [None]
+    except Exception:
+        _pxs = [None]
+    _accs = [a for a in (HACKER_ST.get("accounts") or []) if isinstance(a, dict) and a.get("uuid")]
+    if not _accs:
+        raise EMError("hacker: هیچ ئەکاونت")
+    _exh = HACKER_ST.setdefault("exhausted", {})
+    _now = _t.time()
+    _td = _t.strftime("%Y-%m-%d", _t.gmtime())
+
+    def _dead(u):
+        v = _exh.get(u)
+        if v in (None, 0, "", False):
+            return False
+        try:
+            return float(v) > _now
+        except Exception:
+            return str(v)[:10] == _td
+
+    _fresh = [a for a in _accs if not _dead(a["uuid"]) and int(a.get("used") or 0) < 3]
+    if not _fresh:  # all spent → retry least-used (refunded credits may exist)
+        _fresh = sorted([a for a in _accs if not _dead(a["uuid"])], key=lambda a: int(a.get("used") or 0))[:2]
+    if not _fresh:
+        raise EMError("hacker: هەموو تەواو")
+    _idx = int(HACKER_ST.get("idx") or 0)
+    _try_px = [None] + [p for p in _pxs if p][:3]  # #124b: direct FIRST (site allows DC), proxies after
+    last = None
+    for _k in range(min(3, len(_fresh))):
+        a = _fresh[(_idx + _k) % len(_fresh)]
+        u = a["uuid"]
+        body = {"message": text}
+        if tool:
+            body["tool"] = tool
+        r, _prx = None, None
+        for px in _try_px:
+            _prx = {"http": px, "https": px} if px else None
+            try:
+                r = requests.post("https://hackergpt.app/api/v1/messages/", json=body,
+                                  headers={"Authorization": "Anon " + u, "Content-Type": "application/json",
+                                           "User-Agent": "Mozilla/5.0", "Origin": "https://hackergpt.app",
+                                           "Referer": "https://hackergpt.app/"},
+                                  proxies=_prx, timeout=(12, 45))
+                break
+            except Exception as e:
+                last = e
+                r = None
+        if r is None:
+            try:
+                print("[HG] post fail: %s" % str(last)[:100])
+            except Exception:
+                pass
+            continue
+        if r.status_code in (401, 403):
+            _exh[u] = _now + 315360000  # invalid → dead forever
+            last = EMError("hacker: auth")
+            continue
+        if r.status_code == 402:
+            _exh[u] = _now + 315360000  # no credits → dead forever
+            last = EMError("hacker: کرێدیت تەواو")
+            continue
+        if r.status_code not in (200, 201, 202):
+            last = EMError("hacker: %s" % r.status_code)
+            continue
+        try:
+            mid = (r.json() or {}).get("message_id")
+        except Exception:
+            mid = None
+        if not mid:
+            last = EMError("hacker: no mid")
+            continue
+        a["used"] = int(a.get("used") or 0) + 1
+        HACKER_ST["idx"] = _idx + _k + 1
+        _end = _t.time() + max(20, min(timeout, 100) - 8)
+        if tool:
+            _end = min(_end, _t.time() + 60)  # ctf/osint hang on free accts → fail fast-ish
+        resp, _failed = None, False
+        while _t.time() < _end:
+            _t.sleep(4)
+            try:
+                r2 = requests.get("https://hackergpt.app/api/v1/messages/%s/" % mid,
+                                  headers={"Authorization": "Anon " + u, "User-Agent": "Mozilla/5.0"},
+                                  proxies=_prx, timeout=(15, 30))
+                d2 = r2.json() or {}
+            except Exception:
+                continue
+            if d2.get("status") == "done" and d2.get("response"):
+                resp = d2["response"]
+                break
+            if (d2.get("status") or "") not in ("pending", "running", ""):
+                _failed = True
+                break  # dead run → refunded → try next token
+        _ch = HACKER_ST.setdefault("chats", {})
+        if _ch.get("date") != _td:
+            _ch["date"], _ch["n"] = _td, 0
+        try:
+            _hacker_save_acc()
+        except Exception:
+            pass
+        if resp:
+            _ch["n"] = int(_ch.get("n") or 0) + 1
+            try:
+                _hacker_save_acc()
+            except Exception:
+                pass
+            return resp.strip()
+        if _failed:
+            last = EMError("hacker: وەڵام نەهات")
+            continue  # refunded → next token
+        raise EMError("hacker: وەڵام نەهات")  # stuck (still pending) → don't burn more credits
+    try:
+        _hacker_save_acc()
+    except Exception:
+        pass
+    raise last if isinstance(last, Exception) else EMError("hacker: هەڵە")
+
+
 def worm_chat(messages, model_id="free", timeout=110):
     """#123: WormGPT — guest-first (no key), wgpt v1 fallback when key present."""
     lines = []
@@ -3311,19 +3506,27 @@ def worm_chat(messages, model_id="free", timeout=110):
         lines.append({"role": role if role in ("user", "assistant") else "user", "content": c})
     if not lines:
         raise EMError("worm: هیچ نامە")
-    try:
-        ans = _worm_guest(lines, model_id, timeout)
-        if ans:
-            return ans
-    except EMError as e:
-        if "پلان" in str(e) or "402" in str(e):
-            pass
-        elif _worm_key():
-            pass  # guest failed but key exists → try v1 below
-        else:
+    last_ans, _need_v1 = "", False  # #123j: retry-until-Kurdish (Kurdish≈75%/try → 5 tries≈99.9%), still zero prompt
+    for _try in range(5):
+        try:
+            ans = _worm_guest(lines, model_id, timeout)
+        except EMError as e:
+            if "پلان" in str(e) or "402" in str(e) or _worm_key():
+                _need_v1 = True
+                break  # plan case or key exists → v1 below
+            if last_ans:
+                break  # transient fail after Farsi success → return it below
             raise
+        if ans:
+            if not _worm_is_fa(ans):
+                return ans
+            last_ans = ans
+    if last_ans and not _need_v1:
+        return last_ans
     key = _worm_key()
     if not key:
+        if last_ans:
+            return last_ans
         raise EMError("worm: guest هەڵە + هیچ کلیل")
     try:
         r = requests.post("https://wormgpt.cam/api/v1/chat/completions",

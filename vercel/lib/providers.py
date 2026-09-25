@@ -148,7 +148,7 @@ except Exception:
     pass
 
 # ---- pool seeds + save overrides + signup adapters (V2) ----
-POOL_SEEDS = ("ca", "cb", "nv", "ac", "al", "alle", "mc", "cbox", "pia", "aiml", "worm")
+POOL_SEEDS = ("ca", "cb", "nv", "ac", "al", "alle", "mc", "cbox", "pia", "aiml", "worm", "hacker")
 
 def _seed_load():
     for name in POOL_SEEDS:
@@ -372,13 +372,14 @@ def mc_models(): return []  # no-Fly: hih needs browser-minter (Fly keeps mc)
 def pia_models(): return _pool_cat("pia", R.pia_servers)
 def cbox_models(): return _pool_cat("cbox", R.cbox_servers)
 def worm_models(): return _pool_cat("worm", R.worm_servers)  # #123
+def hacker_models(): return _pool_cat("hacker", R.hg_servers)  # #124
 
 def full_catalog():
     out, seen = [], set()
     for fn in (pol_models, aff_models, lr_models, gz_models, ach_models,
                ca_models, cb_models, nv_models, ac_models, al_models,
                alle_models, rwd_models, mc_models, pia_models, cbox_models,
-               aiml_models, worm_models, duck_models, l7_models, ct_models, yl_models,
+               aiml_models, worm_models, hacker_models, duck_models, l7_models, ct_models, yl_models,
                hk_models, hf_models, aka_models, hb_models, gk_models,
                pi_models, act_models, fla_models, z02_models, qb_models,
                ng_models, cbc_models, g4f_models):
@@ -477,6 +478,11 @@ def chat_once(model_id, messages, timeout=110):
                         return R.hf_chat(messages, it["model"], min(timeout, 100))
                     raise
         raise RuntimeError("hf model unknown: " + model_id)
+    if model_id == "hacker" or model_id.startswith("hacker-"):  # #124
+        for it in hacker_models():
+            if it["id"] == model_id:
+                return R.hg_chat(messages, it["model"], min(timeout, 100))
+        raise RuntimeError("hacker model unknown: " + model_id)
     _KSTD = {"aiml-": (R.aiml_chat, aiml_models), "aka-": (R.aka_chat, aka_models),
              "cbox-": (R.cbox_chat, cbox_models), "ct-": (R.ct_chat, ct_models),
              "g4f-": (R.g4f_chat, g4f_models), "gk-": (R.gk_chat, gk_models),
@@ -1329,7 +1335,8 @@ def proxy_fill(budget_s=90):
 MINTER_KIND = {"ca": "fresh-mint", "cb": "fresh-mint", "nv": "fresh-mint",
                "ac": "signup", "al": "signup", "alle": "signup",
                "mc": "fly-only", "pia": "signup", "cbox": "single-key",
-               "aiml": "single-key", "ach": "hunter", "worm": "guest-pool"}
+               "aiml": "single-key", "ach": "hunter", "worm": "guest-pool",
+               "hacker": "pow-mint"}
 
 
 def _pool_alive_count(name, st):
@@ -1377,7 +1384,7 @@ def api_status():
     for m in cat:
         by_src[m["id"].split("-")[0]] = by_src.get(m["id"].split("-")[0], 0) + 1
     pools = {}
-    for name in ("ca", "cb", "nv", "ac", "al", "alle", "mc", "cbox", "pia", "aiml", "ach", "worm"):
+    for name in ("ca", "cb", "nv", "ac", "al", "alle", "mc", "cbox", "pia", "aiml", "ach", "worm", "hacker"):
         try:
             if name == "ach":
                 _vpx_ach_load()

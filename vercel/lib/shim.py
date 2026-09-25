@@ -135,6 +135,7 @@ def install(R):
     R.CBOX_FREE_ID = '88cc1733-9cf1-4652-a7be-f9a6dbe01737'
     R.CBOX_MODELS = [('aichat', 'AI Chat', 'Chatbox AI'), ('websearch', 'AI WebSearch', 'Chatbox WebSearch')]
     R.CBOX_ST = {'accounts': [], 'idx': 0, 'signups': {'date': '', 'n': 0}}
+    R.WORM_ST = {'key': None}  # #123: single wgpt key (gist poolstate or WORM_KEY env)
     R.CT_LIMIT = {'quota_until': 0.0, 'wobble_until': 0.0}
     R.CT_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36'
     R.DUCK_FE_VERSION = 'serp_20260917_083005_ET-742796f26a61a81dbee67db3e7dd403a0e16294e'

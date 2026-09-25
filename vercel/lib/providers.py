@@ -148,7 +148,7 @@ except Exception:
     pass
 
 # ---- pool seeds + save overrides + signup adapters (V2) ----
-POOL_SEEDS = ("ca", "cb", "nv", "ac", "al", "alle", "mc", "cbox", "pia", "aiml")
+POOL_SEEDS = ("ca", "cb", "nv", "ac", "al", "alle", "mc", "cbox", "pia", "aiml", "worm")
 
 def _seed_load():
     for name in POOL_SEEDS:
@@ -371,13 +371,14 @@ def aiml_models(): return _pool_cat("aiml", R.aiml_servers)
 def mc_models(): return []  # no-Fly: hih needs browser-minter (Fly keeps mc)
 def pia_models(): return _pool_cat("pia", R.pia_servers)
 def cbox_models(): return _pool_cat("cbox", R.cbox_servers)
+def worm_models(): return _pool_cat("worm", R.worm_servers)  # #123
 
 def full_catalog():
     out, seen = [], set()
     for fn in (pol_models, aff_models, lr_models, gz_models, ach_models,
                ca_models, cb_models, nv_models, ac_models, al_models,
                alle_models, rwd_models, mc_models, pia_models, cbox_models,
-               aiml_models, duck_models, l7_models, ct_models, yl_models,
+               aiml_models, worm_models, duck_models, l7_models, ct_models, yl_models,
                hk_models, hf_models, aka_models, hb_models, gk_models,
                pi_models, act_models, fla_models, z02_models, qb_models,
                ng_models, cbc_models, g4f_models):
@@ -483,7 +484,8 @@ def chat_once(model_id, messages, timeout=110):
              "hk-": (R.hk_chat, hk_models), "l7-": (R.l7_chat, l7_models),
              "mc-": (R.mc_chat, mc_models), "pi-": (R.pi_chat, pi_models),
              "pia-": (R.pia_chat, pia_models), "yl-": (R.yl_chat, yl_models),
-             "z02-": (R.z02_chat, z02_models), "cbc-": (R.cbc_chat, cbc_models)}
+             "z02-": (R.z02_chat, z02_models), "cbc-": (R.cbc_chat, cbc_models),
+             "worm-": (R.worm_chat, worm_models)}
     for _pfx, (_fn, _cat) in _KSTD.items():
         if model_id.startswith(_pfx):
             for it in _cat():
@@ -1326,7 +1328,7 @@ def proxy_fill(budget_s=90):
 MINTER_KIND = {"ca": "fresh-mint", "cb": "fresh-mint", "nv": "fresh-mint",
                "ac": "signup", "al": "signup", "alle": "signup",
                "mc": "fly-only", "pia": "signup", "cbox": "single-key",
-               "aiml": "single-key", "ach": "hunter"}
+               "aiml": "single-key", "ach": "hunter", "worm": "single-key"}
 
 
 def _pool_alive_count(name, st):
@@ -1374,7 +1376,7 @@ def api_status():
     for m in cat:
         by_src[m["id"].split("-")[0]] = by_src.get(m["id"].split("-")[0], 0) + 1
     pools = {}
-    for name in ("ca", "cb", "nv", "ac", "al", "alle", "mc", "cbox", "pia", "aiml", "ach"):
+    for name in ("ca", "cb", "nv", "ac", "al", "alle", "mc", "cbox", "pia", "aiml", "ach", "worm"):
         try:
             if name == "ach":
                 _vpx_ach_load()
@@ -1386,7 +1388,7 @@ def api_status():
                 st = getattr(R, name.upper() + "_ST")
                 n = len(st.get("accounts") or [])
                 alive = _pool_alive_count(name, st)
-                if name in ("aiml", "cbox") and st.get("key"):
+                if name in ("aiml", "cbox", "worm") and st.get("key"):
                     n, alive = 1, 1
                 sg = st.get("signups") or {}
             pools[name] = {"n": n, "alive": alive,

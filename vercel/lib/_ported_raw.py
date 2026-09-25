@@ -3149,6 +3149,71 @@ def aiml_chat(messages, model_id, timeout=110):
 def aiml_servers():
     return []  # پارەدار — لابراو لە مینیو (ڕیسێپی پارێزراوە لە کۆد)
 
+def _worm_key():
+    """#123: wgpt key — gist poolstate first (no-redeploy updates), env fallback."""
+    try:
+        k = (WORM_ST.get("key") or "").strip()
+        if k:
+            return k
+    except Exception:
+        pass
+    try:
+        import os as _os
+        return (_os.environ.get("WORM_KEY") or "").strip()
+    except Exception:
+        return ""
+
+
+def worm_servers():
+    # static trio (cached 6h by _pool_cat); pro/max may 402 on free keys → graceful error
+    return [{"id": "worm-free", "model_id": "free", "name": "WormGPT Free"},
+            {"id": "worm-pro", "model_id": "pro", "name": "WormGPT Plus"},
+            {"id": "worm-max", "model_id": "max", "name": "WormGPT Max"}]
+
+
+def worm_chat(messages, model_id="free", timeout=110):
+    """#123: WormGPT via OpenAI-compatible v1 + wgpt key."""
+    lines = []
+    for m in _sys_keep(messages, 19):
+        role = m.get("role")
+        c = (m.get("content") or "").strip()
+        if not c:
+            continue
+        lines.append({"role": role, "content": c})
+    if not lines:
+        raise EMError("worm: هیچ نامە")
+    key = _worm_key()
+    if not key:
+        raise EMError("worm: هیچ کلیل")
+    try:
+        r = requests.post("https://wormgpt.cam/api/v1/chat/completions",
+                          headers={"Authorization": "Bearer " + key, "Content-Type": "application/json",
+                                   "User-Agent": "Mozilla/5.0", "Origin": "https://wormgpt.cam",
+                                   "Referer": "https://wormgpt.cam/"},
+                          json={"model": model_id or "free", "messages": lines}, timeout=(15, timeout))
+    except Exception as e:
+        raise EMError("worm: %s" % str(e)[:60])
+    if r.status_code in (401, 403):
+        raise EMError("worm: کلیل")
+    if r.status_code == 429:
+        raise EMError("worm: لیمیت")
+    if r.status_code == 402:
+        raise EMError("worm: پلان")
+    if r.status_code != 200:
+        raise EMError("worm: HTTP%d" % r.status_code)
+    try:
+        j = r.json()
+        ans = (j.get("choices") or [{}])[0].get("message", {}).get("content", "")
+        if isinstance(ans, list):
+            ans = "".join(x.get("text", "") for x in ans if isinstance(x, dict))
+        ans = (ans or "").strip()
+        if ans:
+            return ans
+    except Exception:
+        pass
+    raise EMError("worm: بەتاڵ")
+
+
 def aka_chat(messages, model_id="openai-gpt-oss-120b", timeout=110):
     """چاتی akash — سیستەم-پرۆمپت لە مێژوو دەهێنرێت (بەتاڵ = نیوتراڵ)؛ 403 سێشن → ڕۆتەیشن؛ #94U49: 429 → سێشن+پرۆکسی نوێ"""
     import time as _t

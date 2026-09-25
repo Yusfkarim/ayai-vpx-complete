@@ -1328,7 +1328,7 @@ def proxy_fill(budget_s=90):
 MINTER_KIND = {"ca": "fresh-mint", "cb": "fresh-mint", "nv": "fresh-mint",
                "ac": "signup", "al": "signup", "alle": "signup",
                "mc": "fly-only", "pia": "signup", "cbox": "single-key",
-               "aiml": "single-key", "ach": "hunter", "worm": "single-key"}
+               "aiml": "single-key", "ach": "hunter", "worm": "guest-pool"}
 
 
 def _pool_alive_count(name, st):
@@ -1384,6 +1384,18 @@ def api_status():
                 n = len(st.get("accounts") or [])
                 alive = _pool_alive_count("ach", st)
                 sg = (st.get("signups") or {})
+            elif name == "worm":  # #123e: guest pool (transports, not accounts)
+                st = R.WORM_ST
+                n = int(st.get("n") or 0)
+                _noww = time.time()
+                _coolw = st.get("cool") or {}
+                try:
+                    _cooln = sum(1 for v in _coolw.values() if float(v or 0) > _noww)
+                except Exception:
+                    _cooln = 0
+                alive = max(0, n - _cooln)
+                _chw = st.get("chats") or {}
+                sg = {"n": _chw.get("n", 0) if _chw.get("date") == time.strftime("%Y-%m-%d", time.gmtime()) else 0}
             else:
                 st = getattr(R, name.upper() + "_ST")
                 n = len(st.get("accounts") or [])
@@ -1394,7 +1406,7 @@ def api_status():
             pools[name] = {"n": n, "alive": alive,
                            "today": sg.get("n", 0) if isinstance(sg, dict) else 0,
                            "minter": MINTER_KIND.get(name, "?"),
-                           "target": 2000 if name in ("ca", "cb", "nv", "ac") else (1 if name in ("cbox", "aiml") else 1000)}
+                           "target": 2000 if name in ("ca", "cb", "nv", "ac") else (1 if name in ("cbox", "aiml") else (7 if name == "worm" else 1000))}
         except Exception:
             pools[name] = {"n": 0, "alive": 0, "minter": MINTER_KIND.get(name, "?")}
     try:

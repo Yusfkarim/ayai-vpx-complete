@@ -3172,13 +3172,29 @@ def worm_servers():
 
 
 def _worm_guest(lines, model_id, timeout):
-    """#123b: guest /api/chat (no key — 15+ consecutive OK, NDJSON stream). #123c: proxy rotation (Vercel ASN may be walled like mail.tm)."""
+    """#123e: guest pool — idx round-robin + per-transport cooldown + chats counter (like ca/cb/cbox)."""
+    import time as _t
     try:
-        _pxs = _proxy_get(4) + [None]
+        _pxs = _proxy_get(6) + [None]
     except Exception:
         _pxs = [None]
+    try:
+        WORM_ST["n"] = len(_pxs)
+        _idx = int(WORM_ST.get("idx") or 0) % max(1, len(_pxs))
+        _pxs = _pxs[_idx:] + _pxs[:_idx]
+        _cool = WORM_ST.setdefault("cool", {})
+    except Exception:
+        _cool = {}
+    _now = _t.time()
     last = None
     for px in _pxs:
+        _ck = px or "direct"
+        try:
+            if float(_cool.get(_ck) or 0) > _now:
+                last = EMError("worm-g: cooling")
+                continue
+        except Exception:
+            pass
         try:
             kw = {"headers": {"Content-Type": "application/json", "Accept": "application/x-ndjson",
                                        "Origin": "https://wormgpt.cam", "Referer": "https://wormgpt.cam/",
@@ -3196,16 +3212,28 @@ def _worm_guest(lines, model_id, timeout):
                     pass
             last = e
             continue
-        if r.status_code in (401, 403):
+        if r.status_code in (401, 403):  # #123f: per-transport wall (nginx IP-deny) → cool + next, NOT instant raise
             try:
                 msg = (r.json() or {}).get("error") or ""
             except Exception:
                 msg = ""
-            raise EMError("worm-g: %s" % (msg[:40] or r.status_code))
+            try:
+                _cool[_ck] = _now + 3600
+            except Exception:
+                pass
+            last = EMError("worm-g: %s" % (msg[:40] or r.status_code))
+            continue
+        if r.status_code == 429:
+            try:
+                _cool[_ck] = _now + 3600
+            except Exception:
+                pass
+            last = EMError("worm-g: 429 cooling")
+            continue
         if r.status_code != 200:
             last = EMError("worm-g: HTTP%d" % r.status_code)
             continue
-        txt, last_delta = "", ""
+        txt, last_delta, _limited = "", "", False
         try:
             for ln in (r.text or "").splitlines():
                 ln = ln.strip()
@@ -3216,7 +3244,17 @@ def _worm_guest(lines, model_id, timeout):
                 except Exception:
                     continue
                 if e.get("type") == "error":
-                    raise EMError("worm-g: %s" % str(e.get("error") or "err")[:50])
+                    _em = str(e.get("error") or "err")[:50]
+                    _el = _em.lower()
+                    if e.get("resetsAt") or any(w in _el for w in ("limit", "quota", "exceed", "too many", "busy", "429", "wait", "slow")):
+                        try:
+                            _cool[_ck] = _now + 3600
+                        except Exception:
+                            pass
+                        _limited = True
+                        last = EMError("worm-g: %s" % _em)
+                        break
+                    raise EMError("worm-g: %s" % _em)
                 if e.get("type") == "result":
                     d = e.get("data") or {}
                     if isinstance(d, dict) and d.get("text"):
@@ -3229,8 +3267,19 @@ def _worm_guest(lines, model_id, timeout):
             raise
         except Exception:
             pass
+        if _limited:
+            continue
         ans = (txt or last_delta or "").strip()
         if ans:
+            try:  # success → advance rotation + count chat (like pool signups)
+                WORM_ST["idx"] = int(WORM_ST.get("idx") or 0) + 1
+                _td = _t.strftime("%Y-%m-%d", _t.gmtime())
+                _ch = WORM_ST.setdefault("chats", {})
+                if _ch.get("date") != _td:
+                    _ch.update(date=_td, n=0)
+                _ch["n"] = int(_ch.get("n") or 0) + 1
+            except Exception:
+                pass
             return ans
         last = EMError("worm-g: بەتاڵ")
     try:

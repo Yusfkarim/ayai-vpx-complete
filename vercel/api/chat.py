@@ -39,6 +39,18 @@ class handler(BaseHTTPRequestHandler):
         got = (self.headers.get("Authorization") or "").strip()
         return got == "Bearer " + want
 
+    def _auth_body(self, data):
+        """#121: accept key in JSON body (key/api_key/apikey) for clients that don't send Bearer header."""
+        try:
+            want = providers.API_KEY
+            if not want:
+                return True
+            d = data or {}
+            got = str(d.get("key") or d.get("api_key") or d.get("apikey") or "").strip()
+            return bool(got) and got == want
+        except Exception:
+            return False
+
     def do_POST(self):
         try:
             providers.cron_slice()
@@ -47,9 +59,6 @@ class handler(BaseHTTPRequestHandler):
         _ip = providers._sec_ip(self)
         if providers._ip_blocked(_ip):
             return self._send(429, {"error": {"message": "blocked", "type": "blocked"}})
-        if not self._auth():
-            providers._note_badkey(_ip)
-            return self._send(401, {"error": {"message": "invalid API key", "type": "auth"}})
         try:
             ln = int(self.headers.get("Content-Length") or 0)
         except Exception:
@@ -58,6 +67,9 @@ class handler(BaseHTTPRequestHandler):
             data = json.loads(self.rfile.read(ln) or b"{}")
         except Exception:
             return self._send(400, {"error": {"message": "bad json", "type": "invalid_request"}})
+        if not self._auth() and not self._auth_body(data):
+            providers._note_badkey(_ip)
+            return self._send(401, {"error": {"message": "invalid API key", "type": "auth"}})
         _stream = bool(data.get("stream"))
         _ip = (self.headers.get("X-Forwarded-For") or "?").split(",")[0].strip()[:40]
         if not providers.rl_check("chat:" + _ip, 30, 60):

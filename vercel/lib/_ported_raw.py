@@ -3353,26 +3353,22 @@ def hg_chat(messages, model_id="", timeout=110):
     except Exception:
         ms = []
     lines = []
-    if tool:  # tool runs: last user message only
-        for m in reversed(ms):
-            if isinstance(m, dict) and m.get("role") == "user" and (m.get("content") or "").strip():
-                lines = [(m.get("content") or "").strip()]
-                break
-    else:
-        for m in ms:
-            if not isinstance(m, dict):
-                continue
-            c = (m.get("content") or "").strip()
-            if not c:
-                continue
-            r = m.get("role")
-            if r == "system":
-                lines.append("System: " + c)
-            elif r == "assistant":
-                lines.append("Assistant: " + c)
-            else:
-                lines.append("User: " + c)
-        lines = lines[-16:]
+    # #124h: ALWAYS full prefixed transcript — bare "check X" triggers slow site-side tool scans (minutes);
+    # "System:/User:"-framed text gets fast chat answers (with recon flavor). All 3 IDs share this path.
+    for m in ms:
+        if not isinstance(m, dict):
+            continue
+        c = (m.get("content") or "").strip()
+        if not c:
+            continue
+        r = m.get("role")
+        if r == "system":
+            lines.append("System: " + c)
+        elif r == "assistant":
+            lines.append("Assistant: " + c)
+        else:
+            lines.append("User: " + c)
+    lines = lines[-16:]
     text = "\n".join(lines).strip()[:6000]
     if not text:
         raise EMError("hacker: هیچ نامە")
@@ -3402,95 +3398,96 @@ def hg_chat(messages, model_id="", timeout=110):
     if not _fresh:
         raise EMError("hacker: هەموو تەواو")
     _idx = int(HACKER_ST.get("idx") or 0)
-    _try_px = [None] + [p for p in _pxs if p][:3]  # #124b: direct FIRST (site allows DC), proxies after
-    last = None
-    for _k in range(min(3, len(_fresh))):
+    _try_px = [(None, (10, 40))] + [(p, (8, 20)) for p in _pxs if p][:1]  # #124f: direct + max 1 fast proxy (proxy hangs killed calls)
+    _plain = {"message": text}
+    # #124e: tool runs take MINUTES site-side (proven >7min) + same-IP runs queue → tool models use the
+    # default agent directly (it does recon itself: fingerprints, summaries). Fast, 1 credit, always works.
+    _bodies = [(_plain, None)]
+    last, _polls = None, 0  # #124g: scan ALL tokens (402 instant-skip); ≤3 poll attempts (queue-aware)
+    for _k in range(len(_fresh)):
         a = _fresh[(_idx + _k) % len(_fresh)]
         u = a["uuid"]
-        body = {"message": text}
-        if tool:
-            body["tool"] = tool
-        r, _prx = None, None
-        for px in _try_px:
-            _prx = {"http": px, "https": px} if px else None
-            try:
-                r = requests.post("https://hackergpt.app/api/v1/messages/", json=body,
-                                  headers={"Authorization": "Anon " + u, "Content-Type": "application/json",
-                                           "User-Agent": "Mozilla/5.0", "Origin": "https://hackergpt.app",
-                                           "Referer": "https://hackergpt.app/"},
-                                  proxies=_prx, timeout=(12, 45))
+        for _body, _cap in _bodies:
+            r, _prx = None, None
+            for px, _to in _try_px:
+                _prx = {"http": px, "https": px} if px else None
+                try:
+                    r = requests.post("https://hackergpt.app/api/v1/messages/", json=_body,
+                                      headers={"Authorization": "Anon " + u, "Content-Type": "application/json",
+                                               "User-Agent": "Mozilla/5.0", "Origin": "https://hackergpt.app",
+                                               "Referer": "https://hackergpt.app/"},
+                                      proxies=_prx, timeout=_to)
+                    break
+                except Exception as e:
+                    last = e
+                    r = None
+            if r is None:
+                break  # network down for this token → next token
+            if r.status_code in (401, 403):
+                _exh[u] = _now + 315360000  # invalid → dead forever
+                last = EMError("hacker: auth")
                 break
-            except Exception as e:
-                last = e
-                r = None
-        if r is None:
-            try:
-                print("[HG] post fail: %s" % str(last)[:100])
-            except Exception:
-                pass
-            continue
-        if r.status_code in (401, 403):
-            _exh[u] = _now + 315360000  # invalid → dead forever
-            last = EMError("hacker: auth")
-            continue
-        if r.status_code == 402:
-            _exh[u] = _now + 315360000  # no credits → dead forever
-            last = EMError("hacker: کرێدیت تەواو")
-            continue
-        if r.status_code not in (200, 201, 202):
-            last = EMError("hacker: %s" % r.status_code)
-            continue
-        try:
-            mid = (r.json() or {}).get("message_id")
-        except Exception:
-            mid = None
-        if not mid:
-            last = EMError("hacker: no mid")
-            continue
-        a["used"] = int(a.get("used") or 0) + 1
-        HACKER_ST["idx"] = _idx + _k + 1
-        _end = _t.time() + max(20, min(timeout, 100) - 8)
-        if tool:
-            _end = min(_end, _t.time() + 60)  # ctf/osint hang on free accts → fail fast-ish
-        resp, _failed = None, False
-        while _t.time() < _end:
-            _t.sleep(4)
-            try:
-                r2 = requests.get("https://hackergpt.app/api/v1/messages/%s/" % mid,
-                                  headers={"Authorization": "Anon " + u, "User-Agent": "Mozilla/5.0"},
-                                  proxies=_prx, timeout=(15, 30))
-                d2 = r2.json() or {}
-            except Exception:
-                continue
-            if d2.get("status") == "done" and d2.get("response"):
-                resp = d2["response"]
+            if r.status_code == 402:
+                _exh[u] = _now + 315360000  # no credits → dead forever
+                last = EMError("hacker: کرێدیت تەواو")
                 break
-            if (d2.get("status") or "") not in ("pending", "running", ""):
-                _failed = True
-                break  # dead run → refunded → try next token
-        _ch = HACKER_ST.setdefault("chats", {})
-        if _ch.get("date") != _td:
-            _ch["date"], _ch["n"] = _td, 0
-        try:
-            _hacker_save_acc()
-        except Exception:
-            pass
-        if resp:
-            _ch["n"] = int(_ch.get("n") or 0) + 1
+            if r.status_code not in (200, 201, 202):
+                last = EMError("hacker: %s" % r.status_code)
+                break
             try:
-                _hacker_save_acc()
+                mid = (r.json() or {}).get("message_id")
             except Exception:
-                pass
-            return resp.strip()
-        if _failed:
+                mid = None
+            if not mid:
+                last = EMError("hacker: no mid")
+                break
+            a["used"] = int(a.get("used") or 0) + 1
+            HACKER_ST["idx"] = _idx + _k + 1
+            _fullcap = max(20, min(timeout, 100) - 8)
+            _end = _t.time() + (_cap if _cap else _fullcap)
+            resp, _failed = None, False
+            while _t.time() < _end:
+                _t.sleep(4)
+                try:
+                    r2 = requests.get("https://hackergpt.app/api/v1/messages/%s/" % mid,
+                                      headers={"Authorization": "Anon " + u, "User-Agent": "Mozilla/5.0"},
+                                      proxies=_prx, timeout=(15, 30))
+                    d2 = r2.json() or {}
+                except Exception:
+                    continue
+                if d2.get("status") == "done" and d2.get("response"):
+                    resp = d2["response"]
+                    break
+                if (d2.get("status") or "") not in ("pending", "running", ""):
+                    _failed = True
+                    break  # dead run → refunded
+            if resp:
+                _ch = HACKER_ST.setdefault("chats", {})
+                if _ch.get("date") != _td:
+                    _ch["date"], _ch["n"] = _td, 0
+                _ch["n"] = int(_ch.get("n") or 0) + 1
+                try:
+                    _hacker_save_acc()
+                except Exception:
+                    pass
+                return resp.strip()
             last = EMError("hacker: وەڵام نەهات")
-            continue  # refunded → next token
-        raise EMError("hacker: وەڵام نەهات")  # stuck (still pending) → don't burn more credits
+            if not _failed:
+                _exh[u] = _now + 600  # #124i: stuck run → token busy (long scan) → cool 10min, route around it
+            _polls += 1
+            if _polls >= 3:
+                try:
+                    _hacker_save_acc()
+                except Exception:
+                    pass
+                raise last  # 3 stuck/failed polls → give up (fallback covers)
+            # stuck (queued run?) or failed (refunded) → try next token
     try:
         _hacker_save_acc()
     except Exception:
         pass
     raise last if isinstance(last, Exception) else EMError("hacker: هەڵە")
+
 
 
 def worm_chat(messages, model_id="free", timeout=110):

@@ -560,6 +560,8 @@ def _fail_mark(mid, ok):
 
 
 def _is_dead(mid):
+    if str(mid or "").startswith("hacker-"):
+        return False  # #124f: pool-backed, always listed; fallback covers pool outages
     try:
         e = _fail_get().get(mid) or {}
         return int(e.get("n", 0)) >= _FAIL_N and time.time() - float(e.get("t", 0)) < _FAIL_TTL

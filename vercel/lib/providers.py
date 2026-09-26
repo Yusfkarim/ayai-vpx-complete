@@ -184,6 +184,14 @@ def _seed_load():
         _pool = R.PROXY_ST.setdefault("pool", {})
         for _p in _pxs[:200]:
             _pool.setdefault(_p, {"t": time.time(), "lat": 9})
+        if not (kv.kv_jget("vpx:px") or []) and len(_pool) < 10:
+            # #135: kv-px بەتاڵە و mem کەمە → harvestی پاشبنەما بۆ تازەکردنەوەی پرۆکسی (gist-ban کاتی)
+            try:
+                import threading as _thh
+                _thh.Thread(target=harvest_proxies, kwargs={"max_keep": 20, "deadline": 60},
+                            daemon=True).start()
+            except Exception:
+                pass
     except Exception:
         pass
 
@@ -1132,11 +1140,37 @@ def cron_slice():
     import threading as _th
     def _run():
         try:
+            try:
+                _seed_load()  # #135: ST پڕ بکە پێش بڕیار (نەک لەسەر بیرگی بەتاڵ mint بکات)
+            except Exception:
+                pass
             now = time.time()
             lk = kv.kv_jget("vpx:slice_lock") or {}
             if now - float(lk.get("t", 0)) < 300:
                 return
             kv.kv_jset("vpx:slice_lock", {"t": now})
+            try:  # #135: خۆبەڕێوەبەری پێشینە — پرۆکسی نەمابێت یان حەوز کەم بێت، چاوەڕوانی سووڕ مەکە (0 invocationی زیادە)
+                _pxn = len(kv.kv_jget("vpx:px") or []) + len((R.PROXY_ST.get("pool") or {}))
+                if _pxn < 5:
+                    harvest_proxies(max_keep=20, deadline=18)
+                    return
+                for _pn2, _t2 in (("ca", 2000), ("cb", 2000), ("nv", 2000), ("ac", 2000),
+                                  ("al", 1000), ("alle", 1000), ("pia", 1000)):
+                    try:
+                        _c2 = len((getattr(R, _pn2.upper() + "_ST") or {}).get("accounts") or [])
+                    except Exception:
+                        continue
+                    if _c2 < _t2:
+                        try:
+                            if _pn2 in ("ca", "cb", "nv"):
+                                mint_fb_pool(_pn2, count=2)
+                            else:
+                                getattr(R, "_" + _pn2 + "_signup_new")()
+                        except Exception:
+                            pass
+                        return
+            except Exception:
+                pass
             n = int((kv.kv_jget("vpx:slice_n") or {}).get("n", 0)) + 1
             kv.kv_jset("vpx:slice_n", {"n": n})
             job = n % 4

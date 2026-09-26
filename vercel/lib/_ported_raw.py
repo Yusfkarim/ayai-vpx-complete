@@ -431,24 +431,30 @@ def ach_chat(messages, model_key="consensus", timeout=110, depth=0):
             return ans
         except _AchLimit as e:
             s = str(e)
-            acc["dead"] = 1
+            _sl = s.lower()
+            if any(w in _sl for w in ("auth", "token", "401", "403", "no-token", "unverified")):
+                acc["dead"] = 1  # #135: مردنی ڕاستەقینە — هەمیشەیی
+                acc["dead_t"] = time.time()
+            else:  # #135: لیمێتی ڕۆژانە (429/limitReached/...) — سبەی دەگەڕێتەوە، نەک مردن
+                acc["limday"] = time.strftime("%Y-%m-%d", time.gmtime())
             with ACH_LOCK:
                 _ach_save()
-            if depth == 0:
+            if depth == 0 and acc.get("dead"):
                 na = _ach_new_account()
                 if na:
                     return ach_chat(messages, model_key, timeout, depth=1)
+            if not acc.get("dead"):
+                continue  # لیمێت — ئەکاونتی دواتر لە هەمان بانگەوە
             raise EMError(f"ach: {s[:80]}")
         except EMError:
             raise
         except Exception as e:
             if depth == 0:
-                acc["dead"] = 1
+                # #135: هەڵەی نەناسراو (کێشەی تۆڕ...) — لیمdayی کاتی، نەک مردنی هەمیشەیی
+                acc["limday"] = time.strftime("%Y-%m-%d", time.gmtime())
                 with ACH_LOCK:
                     _ach_save()
-                na = _ach_new_account()
-                if na:
-                    return ach_chat(messages, model_key, timeout, depth=1)
+                continue
             raise EMError(f"ach: {str(e)[:80]}")
     raise EMError("ach: دووبارە بوونەوە سەرکەوتوو نەبوو")
 
@@ -588,6 +594,14 @@ def _ach_new_account():
                "ts": time.time(), "day": today, "n": 0, "dead": 0}
         with ACH_LOCK:
             ACH_ST.setdefault("accounts", []).append(acc)
+            try:  # #135: لاشەکانی +3 ڕۆژ لابەرە (فایل قەڵەو نەبێت؛ زیندووەکان+limday دەمێنن)
+                _cut = time.time() - 259200
+                _aa0 = ACH_ST.get("accounts") or []
+                _aa1 = [a for a in _aa0 if not (a.get("dead") and float(a.get("dead_t") or 0) < _cut)]
+                if len(_aa1) != len(_aa0):
+                    ACH_ST["accounts"] = _aa1
+            except Exception:
+                pass
             _aa = ACH_ST.get("accounts") or []
             if len(_aa) > 1500:  # #119: was 320 (could never reach 1000 alive)
                 _lv = [a for a in _aa if not a.get("dead")][-1200:]
@@ -809,6 +823,8 @@ def _ach_alive():
     out = []
     for a in (ACH_ST.get("accounts") or []):
         if a.get("dead"):
+            continue
+        if a.get("limday") == today:  # #135: لیمێتی ئەمڕۆ — سبەی دەگەڕێتەوە
             continue
         if int(a.get("n") or 0) >= ACH_BUDGET:
             continue
@@ -1336,6 +1352,13 @@ def ca_chat(messages, model_id, timeout=110):
                 continue
             if r.status_code in (401, 403):
                 CA_ST["tok"] = None
+                try:  # #135: توکن مردووە — نیشانی بکە و یەکێکی نوێ لە جێی (1-بە-1)
+                    _dacc = getattr(_TLS, "ca_acc", None)
+                    if _dacc is not None:
+                        _lim_kill(CA_ST, _dacc.get("email"))
+                        _replace_dead_soon("ca")
+                except Exception:
+                    pass
                 if not _ca_rotate(mkey):
                     raise EMError("ca: توکن")
                 continue
@@ -1594,6 +1617,14 @@ def al_chat(messages, model_id, timeout=110):
             sess = _al_login(force=True)
             ck = {AL_COOKIE: json.dumps(sess)}
             continue
+        if r.status_code in (401, 403):  # #135: attempt 1 — re-login شکست، ئەکاونتەکە مردووە
+            try:
+                _alaccs2 = AL_ST.get("accounts") or []
+                if _alaccs2:
+                    _lim_kill(AL_ST, (_alaccs2[AL_ST.get("idx", 0) % len(_alaccs2)] or {}).get("email"))
+                    _replace_dead_soon("al")
+            except Exception:
+                pass
         if r.status_code == 402 and attempt == 0:  # #94U49: ئەکاونتی داهاتوو
             _al_rotate()
             sess = _al_login(force=True)
@@ -1607,6 +1638,13 @@ def al_chat(messages, model_id, timeout=110):
             ck = {AL_COOKIE: json.dumps(sess)}
             continue
         if r.status_code == 429:
+            try:  # #135: ئەم ئەکاونتە ئەمڕۆ لیمێتە (سبەی دەگەڕێتەوە) + یەکێکی نوێ لە جێی
+                _alaccs = AL_ST.get("accounts") or []
+                if _alaccs:
+                    _alem = (_alaccs[AL_ST.get("idx", 0) % len(_alaccs)] or {}).get("email") or "?"
+                    AL_ST.setdefault("limits", {}).setdefault(_alem, {})["*"] = _lim_today()
+            except Exception:
+                pass
             _replace_dead_soon("al")  # #94U49: نوێ لە جێی
             raise EMError("al: لیمیت")
         if r.status_code != 200:
@@ -1713,6 +1751,13 @@ def ac_chat(messages, model_id, timeout=110):
                 continue
             if r.status_code in (401, 403):
                 AC_ST["tok"] = None
+                try:  # #135: توکن مردووە — نیشانی بکە و یەکێکی نوێ لە جێی (1-بە-1)
+                    _dacc = getattr(_TLS, "ac_acc", None)
+                    if _dacc is not None:
+                        _lim_kill(AC_ST, _dacc.get("email"))
+                        _replace_dead_soon("ac")
+                except Exception:
+                    pass
                 if not _ac_rotate(mkey):
                     raise EMError("ac: توکن")
                 continue
@@ -1822,6 +1867,11 @@ def _ac_token():
                 acc["boot"] = True
                 _ac_save_acc()
             return res[0]
+    try:  # #135: sign-in شکست — لاشەکە نیشان بکە
+        if acc is not None:
+            _lim_kill(AC_ST, acc.get("email"))
+    except Exception:
+        pass
     resn = _ac_signup_new()
     if not resn:
         raise EMError("ac: هیچ ئەکاونت")
@@ -1863,12 +1913,27 @@ def _al_login(force=False):
     return AL_ST["sess"]
 
 def _al_rotate():
-    """#91AA: ئەکاونتی دواتر — ئەگەر هیچ نەما سایناپی نوێ"""
-    accs = AL_ST.get("accounts") or []
-    AL_ST["idx"] = (AL_ST.get("idx", 0) + 1) % max(len(accs), 1)
-    AL_ST["sess"] = None
-    _al_save_acc()
-    return bool(_al_signup_new())
+    """#91AA: ئەکاونتی دواتر — لیمێتکراوەکانی ئەمڕۆ + مردووەکان دەپەڕێت؛
+       #135: چیتر سایناپ ناکات لە هەر rotate (تەنها replace/slice/cron دروست دەکەن)"""
+    try:
+        accs = AL_ST.get("accounts") or []
+        if not accs:
+            return bool(_al_signup_new())
+        lim = AL_ST.get("limits") or {}
+        n = len(accs)
+        for _ in range(n):
+            AL_ST["idx"] = (AL_ST.get("idx", 0) + 1) % n
+            _em = lim.get((accs[AL_ST["idx"]] or {}).get("email") or "?") or {}
+            if not _lim_hit(_em):
+                break
+        AL_ST["sess"] = None
+        try:
+            _al_save_acc()
+        except Exception:
+            pass
+        return True
+    except Exception:
+        return True
 
 def _alle_ask(acc, model_id, text, timeout=110, mkey=""):
     """فڵۆوی تەواو: WS → auth → subscribe → create/prompt → ai-response → چانکەکان"""
@@ -1904,6 +1969,12 @@ def _alle_ask(acc, model_id, text, timeout=110, mkey=""):
                                     "combine": False, "compare": False, "web_search": False},
                               headers={**hdrs, "Content-Type": "application/json"}, timeout=(10, 30))
         if r.status_code != 200:
+            if r.status_code == 401:  # #135: re-login شکست — ئەکاونتەکە مردووە
+                try:
+                    _lim_kill(ALLE_ST, acc.get("email"))
+                    _replace_dead_soon("alle")
+                except Exception:
+                    pass
             raise EMError(f"alle: prompt {r.status_code} {r.text[:60]}")
         pid = (r.json() or {}).get("id")
         acc["pos"] = pos + 1
@@ -1995,7 +2066,7 @@ def _alle_pick(mkey):
     for i in range(n):
         a = accs[(ALLE_ST.get("idx", 0) + i) % n]
         L = lim.get(a.get("email") or "?") or {}
-        if L.get("*") == today or L.get(mkey) == today:
+        if L.get("*") is True or L.get("*") == today or L.get(mkey) is True or L.get(mkey) == today:  # #135: + مردووە هەمیشەییەکان
             continue
         ALLE_ST["idx"] = (ALLE_ST.get("idx", 0) + i + 1) % n
         return a
@@ -2058,6 +2129,11 @@ def _ca_token():
             with _CA_LK:
                 CA_ST.setdefault("toks", {})[em] = (res[0], _t.time())
             return res[0]
+    try:  # #135: sign-in شکست — لاشەکە نیشان بکە (نەک هەر جاری دووبارە هەڵیبژێرێتەوە)
+        if acc is not None:
+            _lim_kill(CA_ST, acc.get("email"))
+    except Exception:
+        pass
     resn = _ca_signup_new()
     if not resn:
         raise EMError("ca: هیچ ئەکاونت")
@@ -2144,6 +2220,11 @@ def _cb_token():
     res = _cb_firebase("signInWithPassword", acc["email"], acc["password"])
     if not res:
         # ئەکاونتەکە نییە — دواتری
+        try:  # #135: لاشەکە نیشان بکە + یەکێکی نوێ لە جێی
+            _lim_kill(CB_ST, em)
+            _replace_dead_soon("cb")
+        except Exception:
+            pass
         raise EMError("cb: sign-in شکات")
     with _CB_LK:
         CB_ST.setdefault("toks", {})[em] = (res[0], res[1], _t.time())
@@ -2239,6 +2320,11 @@ def _nv_token():
             with _NV_LK:
                 NV_ST.setdefault("toks", {})[em] = (res[0], res[1], _t.time())
             return res
+    try:  # #135: sign-in شکست — لاشەکە نیشان بکە
+        if acc is not None:
+            _lim_kill(NV_ST, acc.get("email"))
+    except Exception:
+        pass
     resn = _nv_signup_new()
     if not resn:
         raise EMError("nv: هیچ ئەکاونت")
@@ -2446,7 +2532,7 @@ def _cb_firebase(ep, email, pw):
 
 def _lim_hit(em, model_key=None):
     """#91Z: ئایا ئەم ئەکاونتە ئەمڕۆ limit ە؟ — ستار/مۆدێڵ-لیمێتی دوێنێ خۆکارانە بەسەردەچێت
-       (کۆن: True ی هەمیشەیی = ئەمڕۆ دەژمێردرێت — سبەی ئازاد دەبێت؛ تەنها lifetime هەمیشەییە)"""
+       (سبەی دەگەڕێتەوە ناو سووڕ)؛ True = مردنی هەمیشەیی (هەرگیز ناگەڕێتەوە)"""
     if not em:
         return False
     today = _lim_today()
@@ -2459,6 +2545,25 @@ def _lim_hit(em, model_key=None):
         if mv and (mv is True or str(mv) == today):
             return True
     return False
+
+
+def _lim_kill(st, email):
+    """#135: مردنی هەمیشەیی (401/403/auth) — ئەم ئەکاونتە چیتر هەڵنەبژێرە.
+       بۆ هەردوو شێواز دادەنێت (limits-ستار + exhausted-timestamp) تا هەموو rotate ەکان بیپەڕێنن."""
+    try:
+        if not email or not isinstance(st, dict):
+            return
+        try:
+            st.setdefault("limits", {}).setdefault(email, {})["*"] = True
+        except Exception:
+            pass
+        try:
+            st.setdefault("exhausted", {})[email] = 9999999999.0
+        except Exception:
+            pass
+    except Exception:
+        pass
+
 
 def _nv_firebase(ep, email, pw):
     r = requests.post(f"https://identitytoolkit.googleapis.com/v1/accounts:{ep}?key={NV_KEY}",
@@ -2501,7 +2606,36 @@ def _replace_dead_worker(kind):
             now = time.time()
             lim = st.get("limits") or {}
             exh = st.get("exhausted") or {}
+            try:  # #135: لاشە هەمیشەییەکان لابەرە (1-بە-1ی ڕاستەقینە: -1 لاشە +1 نوێ = قەبارە جێگیر)
+                _kept = []
+                for _a in accs:
+                    _ae = (_a or {}).get("email") or "?"
+                    _star = (lim.get(_ae) or {}).get("*")
+                    try:
+                        _exv = float(exh.get(_ae, 0) or 0)
+                    except Exception:
+                        _exv = 0
+                    if _star is True or _exv > now + 2592000:
+                        continue
+                    _kept.append(_a)
+                if len(_kept) != len(accs):
+                    st["accounts"] = _kept
+                    accs = _kept
+                    try:
+                        _sv = {"ca": "_ca_save_acc", "cb": "_cb_save_acc", "nv": "_nv_save_acc",
+                               "ac": "_ac_save_acc", "al": "_al_save_acc", "alle": "_alle_save_acc",
+                               "pia": "_pia_save_acc", "em": "_em_save_acc"}.get(kind)
+                        _sf = globals().get(_sv) if _sv else None
+                        if callable(_sf):
+                            _sf()
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+            _tgt = 2000 if kind in ("ca", "cb", "nv", "ac") else 1000  # #135: ئامانجی هەر حەوز
             healthy = sum(1 for a in accs if _pool_acc_alive(a, lim, exh, today, now))
+            if healthy >= _tgt:
+                return  # #135: پڕە (1999→1 نوێ؛ 2000→وەستە) — Vercel و Firebase خاوێن
             if healthy >= len(accs):
                 return  # هەموو زیندوون (پێشتر جێگۆڕکێ کراوە) — بودجە مەخەرە
             print(f"[REPLACE] {kind}: {healthy}/{len(accs)} زیندوو — جێگۆڕکێ...", flush=True)
@@ -2633,7 +2767,10 @@ def _rwd_swap(ua):
 def _pool_acc_alive(a, lim, exh, today, now):
     """#94U24: زیندوویی یەکگرتوو — وەک rotate ەکان (cooldown-until + general/model-limit)"""
     e = a.get("email") or "?"
-    if today in (lim.get(e) or {}).values():
+    _lv = list((lim.get(e) or {}).values())
+    if any(v is True for v in _lv):  # #135: مردنی هەمیشەیی (_lim_kill)
+        return False
+    if today in _lv:
         return False
     v = exh.get(e)
     if v:
@@ -4748,6 +4885,11 @@ def pia_chat(messages, agent_id, timeout=110, depth=0):
                           timeout=(12, timeout), stream=True)
         if r.status_code == 401:
             _pia_mark(acc, agent_id, "auth")
+            try:  # #135: توکنی piax مردووە (نازیندوو نابێتەوە) — نیشانی بکە + نوێ لە جێی
+                _lim_kill(PIA_ST, acc.get("email"))
+                _replace_dead_soon("pia")
+            except Exception:
+                pass
             raise EMError("piax: توکن مردووە")
         parts = []
         for raw in r.iter_lines(chunk_size=None):
@@ -5542,7 +5684,7 @@ def _pia_pick(agent_id):
     for i in range(n):
         a = accs[(PIA_ST.get("idx", 0) + i) % n]
         L = lim.get(a.get("email") or "?") or {}
-        if L.get("*") == today or L.get(agent_id) == today:
+        if L.get("*") is True or L.get("*") == today or L.get(agent_id) is True or L.get(agent_id) == today:  # #135: + مردووە هەمیشەییەکان
             continue
         PIA_ST["idx"] = (PIA_ST.get("idx", 0) + i + 1) % n
         return a

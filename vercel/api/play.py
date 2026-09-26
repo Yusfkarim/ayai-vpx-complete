@@ -62,8 +62,8 @@ class handler(BaseHTTPRequestHandler):
         messages = data.get("messages") or []
         if not messages or len(messages) > 20:
             return self._send(400, {"error": "messages 1..20 required"})
-        if not _vip and len(messages) > 6:
-            return self._send(400, {"error": "free tier: max 6 messages (add API key for more)"})
+        if not _vip and len(messages) > 20:
+            return self._send(400, {"error": "free tier: max 20 messages (add API key for more)"})
         clean = []
         for m in messages[-20:]:
             if not isinstance(m, dict):

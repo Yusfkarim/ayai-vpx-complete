@@ -140,6 +140,16 @@ section{flex:1;display:flex;flex-direction:column;min-width:0;min-height:0}
 #inp{border-radius:18px;max-height:140px}
 .hero h2{background:linear-gradient(90deg,#c4b5fd,#f0abfc);-webkit-background-clip:text;background-clip:text;color:transparent;font-size:24px}
 .msg b{color:#fff}.msg i{color:#d9ccff}::selection{background:rgba(124,92,240,.45);color:#fff}#msgs::-webkit-scrollbar,#list::-webkit-scrollbar{width:8px;height:8px}#msgs::-webkit-scrollbar-thumb,#list::-webkit-scrollbar-thumb{background:linear-gradient(180deg,#7c5cf0,#4a3480);border-radius:8px}#msgs::-webkit-scrollbar-track,#list::-webkit-scrollbar-track{background:transparent}.msg.a{text-rendering:optimizeLegibility;font-size:15.5px}.who{display:inline-block;background:linear-gradient(135deg,rgba(124,92,240,.28),rgba(177,140,255,.1));padding:3px 14px;border-radius:20px;border:1px solid rgba(124,92,240,.4);box-shadow:0 2px 12px rgba(124,92,240,.25)}.msg.u{border:1px solid rgba(255,255,255,.16);text-rendering:optimizeLegibility}.cb pre{tab-size:4}.msg tr:hover td{background:rgba(124,92,240,.09)}.msg a{transition:color .15s,border-color .15s}.msg a:hover{color:#c4e0ff}#send{transition:filter .15s,box-shadow .15s,transform .1s}#send:hover:not(:disabled){filter:brightness(1.12);box-shadow:0 4px 24px rgba(124,92,240,.55)}#send:active:not(:disabled){transform:scale(.96)}.btn{transition:filter .15s,box-shadow .15s}.ghost{transition:border-color .15s,color .15s,background .15s}.tbtn{transition:border-color .15s,background .15s,transform .1s}.tbtn:active{transform:scale(.93)}.hero .big{animation:float 3.2s ease-in-out infinite}@keyframes float{50%{transform:translateY(-7px)}}#cur .pill{box-shadow:0 2px 14px rgba(124,92,240,.35)}.mrow{transition:background .15s,border-color .15s}.cpb,.cpb2{transition:background .15s,color .15s,box-shadow .15s,border-color .15s}
+#chbox{border-bottom:1px solid var(--line);flex-shrink:0}
+#chhead{display:flex;align-items:center;justify-content:space-between;padding:8px 12px;font-size:13px;font-weight:800;color:#d9ccff}
+#newc{padding:6px 12px;min-height:34px;font-size:13px}
+#chats{max-height:180px;overflow-y:auto;padding:0 8px 8px}
+.crow{display:flex;align-items:center;gap:2px;padding:9px 8px;border-radius:10px;font-size:13px;cursor:pointer;color:#c6c6d8;border:1px solid transparent}
+.crow:hover{background:var(--card)}
+.crow.sel{background:rgba(124,92,240,.14);border-color:rgba(124,92,240,.4);color:#fff}
+.crow .cnm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;pointer-events:none}
+.cbtn{background:transparent;color:#8e8ea6;border:none;border-radius:8px;font-size:13px;padding:6px 7px;min-height:0}
+.cbtn:hover{background:var(--card);color:#fff}
 </style>
 </head>
 <body>
@@ -154,6 +164,7 @@ section{flex:1;display:flex;flex-direction:column;min-width:0;min-height:0}
 <aside id="side">
 <div class="tools"><input id="q" placeholder="🔍 گەڕان بەدوای مۆدێل…"><button class="ghost" id="rf" onclick="refreshModels()" title="هێنانی نوێترین مۆدێلەکان">🔄</button></div>
 <div id="mstat" style="padding:8px 12px;font-size:12px;color:var(--mut);border-bottom:1px solid var(--line)">…</div>
+<div id="chbox"><div id="chhead"><span>💬 جلسەکان</span><button class="ghost" id="newc" onclick="newChat();toggleDrawer(false)" title="جلسەی نوێ">➕</button></div><div id="chats"></div></div>
 <div id="list"></div>
 </aside>
 <section>
@@ -219,9 +230,13 @@ async function loadModels(){
  if(seen===null){try{localStorage.vpx_seen=JSON.stringify(MODELS);}catch(e){}}
  else{for(let id of MODELS)if(seen.indexOf(id)<0)NEWSET[id]=1;
   try{localStorage.vpx_seen=JSON.stringify(MODELS);}catch(e){}}
+ try{let _m=localStorage.vpx_model;if(_m)CUR=_m;}catch(e){}
  if(!CUR&&MODELS.length)CUR=MODELS[0];
  $("curm").textContent=CUR||"—";
  updStat();renderList("");
+ loadChats();
+ if(CHATID&&cur())openChat(CHATID);
+ else newChat();
 }
 function updStat(){
  let ok=0,bad=0;
@@ -261,21 +276,30 @@ $("list").addEventListener("click",e=>{
  let row=t.closest?t.closest(".mrow"):null;
  if(row&&row.dataset.i!==undefined)pick(MODELS[+row.dataset.i]);
 });
-function pick(id){CUR=id;$("curm").textContent=id;HIST=[];$("msgs").innerHTML="";renderList($("q").value);toggleDrawer(false);}
+$("chats").addEventListener("click",e=>{
+ let t=e.target;
+ if(t.dataset&&t.dataset.r){e.stopPropagation();let c=null;for(let i=0;i<CHATS.length;i++)if(CHATS[i].id===t.dataset.r)c=CHATS[i];if(!c)return;let n=prompt("ناوی جلسە:",c.name||"");if(n!==null&&n.trim()){c.name=n.trim().slice(0,60);saveChats();renderChats();}return;}
+ if(t.dataset&&t.dataset.d){e.stopPropagation();if(!confirm("ئەم جلسەیە بسڕدرێتەوە؟"))return;CHATS=CHATS.filter(x=>x.id!==t.dataset.d);if(CHATID===t.dataset.d){CHATID=null;if(CHATS.length)openChat(CHATS[CHATS.length-1].id);else newChat();}saveChats();renderChats();return;}
+ let row=t.closest?t.closest(".crow"):null;
+ if(row&&row.dataset.c){openChat(row.dataset.c);toggleDrawer(false);}
+});
+function pick(id){CUR=id;$("curm").textContent=id;HIST=[];$("msgs").innerHTML="";try{localStorage.vpx_model=id;}catch(e){}let c=cur();if(c){c.model=id;c.hist=[];c.ts=Date.now();saveChats();renderChats();}renderList($("q").value);toggleDrawer(false);}
 function bubble(who,text,meta){
  let h=$("hero");if(h)h.remove();
  let d=document.createElement("div");d.className="msg "+who;d.setAttribute("dir","auto");d.textContent=text;
  if(meta){let m=document.createElement("div");m.className="meta";m.textContent=meta;d.appendChild(m);}
  $("msgs").appendChild(d);$("msgs").scrollTop=1e9;return d;
 }
-function clearChat(){HIST=[];$("msgs").innerHTML="";}
+function clearChat(){HIST=[];$("msgs").innerHTML="";syncChat();}
 async function send(){
  let t=$("inp").value.trim();if(!t||!CUR)return;
  $("inp").value="";$("inp").style.height="auto";bubble("u",t);
  HIST.push({role:"user",content:t});
+ let _c=cur();if(_c){_c.hist=HIST.slice(-100);_c.model=CUR;_c.ts=Date.now();let _un=0;for(let _m of HIST)if(_m.role==="user")_un++;if(_un===1)_c.name=t.slice(0,32);saveChats();renderChats();}
  let us=$("sys").value.trim();try{localStorage.vpx_sys=$("sys").value;}catch(e){}
  let sys=us?us+"\\n\\n"+PROTO:PROTO;
- let msgs=(sys?[{role:"system",content:sys}]:[]).concat(HIST.slice(-6));
+ let _hm=[],_bl=0;for(let _i=HIST.length-1;_i>=0&&_hm.length<19;_i--){let _m=HIST[_i];_bl+=(_m.content||"").length;if(_bl>30000)break;_hm.unshift(_m);}
+ let msgs=(sys?[{role:"system",content:sys}]:[]).concat(_hm);
  let ty=bubble("a","● ● ●");ty.classList.add("typ");
  $("send").disabled=true;
  try{
@@ -284,7 +308,7 @@ async function send(){
   let d=await r.json();
   ty.classList.remove("typ");
   if(!r.ok){ty.textContent="⚠️ "+(d.error||r.status);}
-  else{HIST.push({role:"assistant",content:d.text});stream(ty,d.text,"لەڕێگەی "+d.used+" · "+d.seconds+" چرکە");}
+  else{HIST.push({role:"assistant",content:d.text});syncChat();stream(ty,d.text,"لەڕێگەی "+d.used+" · "+d.seconds+" چرکە");}
  }catch(e){ty.textContent="⚠️ "+e;}
  $("send").disabled=false;
 }
@@ -341,6 +365,35 @@ function stream(el,full,meta){
    let cb=document.createElement("button");cb.className="cpb2";cb.textContent="⧉ کوپی نامە";cb.onclick=function(){cpMsg(this);};el.appendChild(cb);
    try{$("msgs").scrollTop=1e9;}catch(e){}}},25);
 }
+let CHATS=[],CHATID=null;
+function loadChats(){try{CHATS=JSON.parse(localStorage.vpx_chats||"[]");}catch(e){CHATS=[];}
+ if(!Array.isArray(CHATS))CHATS=[];
+ try{CHATID=localStorage.vpx_cur||null;}catch(e){CHATID=null;}}
+function saveChats(){try{localStorage.vpx_chats=JSON.stringify(CHATS.slice(-30));if(CHATID)localStorage.vpx_cur=CHATID;}catch(e){}}
+function cur(){for(let i=0;i<CHATS.length;i++)if(CHATS[i].id===CHATID)return CHATS[i];return null;}
+function syncChat(){let c=cur();if(!c)return;c.hist=HIST.slice(-100);c.model=CUR;c.ts=Date.now();saveChats();}
+function newChat(){let id="c"+Date.now().toString(36)+Math.floor(Math.random()*999);
+ let c={id:id,name:"جلسەی نوێ",model:CUR,hist:[],ts:Date.now()};
+ CHATS.push(c);if(CHATS.length>30)CHATS=CHATS.slice(-30);
+ CHATID=id;HIST=[];$("msgs").innerHTML="";saveChats();renderChats();return c;}
+function openChat(id){let c=null;for(let i=0;i<CHATS.length;i++)if(CHATS[i].id===id)c=CHATS[i];if(!c)return;
+ CHATID=id;if(c.model)CUR=c.model;HIST=(c.hist||[]).slice(-100);
+ try{localStorage.vpx_model=CUR;}catch(e){}
+ $("curm").textContent=CUR||"—";$("msgs").innerHTML="";
+ for(let m of HIST){if(!m||!m.content)continue;if(m.role==="user")bubble("u",m.content);else if(m.role==="assistant")renderHist(m.content);}
+ try{$("msgs").scrollTop=1e9;}catch(e){}
+ saveChats();renderChats();renderList($("q").value);}
+function renderHist(text){let h=$("hero");if(h)h.remove();
+ let d=document.createElement("div");d.className="msg a";d.setAttribute("dir","auto");d._raw=text;
+ let who=document.createElement("div");who.className="who";who.textContent="▲ "+(CUR||"assistant");d.appendChild(who);
+ let bd=document.createElement("div");bd.innerHTML=renderMd(text);while(bd.firstChild)d.appendChild(bd.firstChild);
+ let cb=document.createElement("button");cb.className="cpb2";cb.textContent="⧉ کوپی نامە";cb.onclick=function(){cpMsg(this);};d.appendChild(cb);
+ $("msgs").appendChild(d);}
+function renderChats(){let h="";
+ let rev=CHATS.slice().reverse();
+ for(let c of rev){
+  h+="<div class='crow"+(c.id===CHATID?" sel":"")+"' data-c='"+c.id+"'><span class='cnm'>"+esc(c.name||"جلسە")+"</span><button class='cbtn' data-r='"+c.id+"' title='گۆڕینی ناو'>✏️</button><button class='cbtn' data-d='"+c.id+"' title='سڕینەوە'>🗑</button></div>";}
+ $("chats").innerHTML=h||"<div style='padding:8px 12px;font-size:12px;color:var(--mut)'>هیچ جلسەیەک نییە</div>";}
 async function testModel(id,idx){
  let sl=document.querySelectorAll('[id="t'+idx+'"]');
  sl.forEach(s=>{s.textContent="…";s.style.color="";});

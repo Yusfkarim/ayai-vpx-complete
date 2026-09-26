@@ -139,6 +139,7 @@ section{flex:1;display:flex;flex-direction:column;min-width:0;min-height:0}
 #msgs{max-width:900px;margin:0 auto;width:100%}
 #inp{border-radius:18px;max-height:140px}
 .hero h2{background:linear-gradient(90deg,#c4b5fd,#f0abfc);-webkit-background-clip:text;background-clip:text;color:transparent;font-size:24px}
+.msg b{color:#fff}.msg i{color:#d9ccff}::selection{background:rgba(124,92,240,.45);color:#fff}#msgs::-webkit-scrollbar,#list::-webkit-scrollbar{width:8px;height:8px}#msgs::-webkit-scrollbar-thumb,#list::-webkit-scrollbar-thumb{background:linear-gradient(180deg,#7c5cf0,#4a3480);border-radius:8px}#msgs::-webkit-scrollbar-track,#list::-webkit-scrollbar-track{background:transparent}.msg.a{text-rendering:optimizeLegibility;font-size:15.5px}.who{display:inline-block;background:linear-gradient(135deg,rgba(124,92,240,.28),rgba(177,140,255,.1));padding:3px 14px;border-radius:20px;border:1px solid rgba(124,92,240,.4);box-shadow:0 2px 12px rgba(124,92,240,.25)}.msg.u{border:1px solid rgba(255,255,255,.16);text-rendering:optimizeLegibility}.cb pre{tab-size:4}.msg tr:hover td{background:rgba(124,92,240,.09)}.msg a{transition:color .15s,border-color .15s}.msg a:hover{color:#c4e0ff}#send{transition:filter .15s,box-shadow .15s,transform .1s}#send:hover:not(:disabled){filter:brightness(1.12);box-shadow:0 4px 24px rgba(124,92,240,.55)}#send:active:not(:disabled){transform:scale(.96)}.btn{transition:filter .15s,box-shadow .15s}.ghost{transition:border-color .15s,color .15s,background .15s}.tbtn{transition:border-color .15s,background .15s,transform .1s}.tbtn:active{transform:scale(.93)}.hero .big{animation:float 3.2s ease-in-out infinite}@keyframes float{50%{transform:translateY(-7px)}}#cur .pill{box-shadow:0 2px 14px rgba(124,92,240,.35)}.mrow{transition:background .15s,border-color .15s}.cpb,.cpb2{transition:background .15s,color .15s,box-shadow .15s,border-color .15s}
 </style>
 </head>
 <body>
@@ -159,7 +160,13 @@ section{flex:1;display:flex;flex-direction:column;min-width:0;min-height:0}
 <div id="cur"><span style="color:var(--mut);font-size:13px">مۆدێل:</span><span class="pill" id="curm">—</span><button class="ghost" onclick="testCurrent()" style="margin-left:auto">⚡ تاقیکردنەوە</button><button class="ghost" onclick="clearChat()">سڕینەوە</button></div>
 <div id="msgs"><div class="hero" id="hero"><div class="big">💬</div><h2>مۆدێلێک هەڵبژێرە و دەستپێبکە</h2><p>زیاتر لە 190 مۆدێلی AI خۆڕایی، بەبێ چوونەژوور و کلیت.<br>کرتە لە ☰ بکە بۆ مۆدێلەکان و ⚡ بۆ تاقیکردنەوە.</p><div class="hint">⚡ = تاقیکردنەوەی ڕاستەوخۆ &nbsp;•&nbsp; 🔄 = نوێکردنەوەی مۆدێلەکان</div></div></div>
 <div id="box">
-<div id="sysrow"><textarea id="sys" rows="8" placeholder="پرۆمپتی سیستەم…"># 🎨 SYSTEM INSTRUCTION: ABSOLUTE MARKDOWN &amp; VISUAL FORMATTING PROTOCOL
+<div id="sysrow"><textarea id="sys" rows="4" placeholder="پرۆمپتی سیستەم…"></textarea></div>
+<div id="row"><button class="iconbtn" onclick="document.getElementById('sysrow').classList.toggle('show')" title="پرۆمپتی سیستەم">⚙</button><textarea id="inp" placeholder="نامە بۆ مۆدێلەکە بنوسە…" rows="1"></textarea><button class="btn" id="send" onclick="send()">➤</button></div>
+</div>
+</section>
+</main>
+<script id="proto" type="text/plain">
+# 🎨 SYSTEM INSTRUCTION: ABSOLUTE MARKDOWN & VISUAL FORMATTING PROTOCOL
 
 You are an advanced AI context decorator. Your primary mission is to format ALL generated text with strict Markdown compliance, exceptional typography, visual hierarchy, and precise RTL/LTR text alignment.
 
@@ -167,7 +174,7 @@ You are an advanced AI context decorator. Your primary mission is to format ALL 
 
 ## 🚨 MANDATORY FORMATTING RULES (STRICT COMPLIANCE)
 
-### 1. HEADINGS &amp; TITLES (LARGE &amp; BOLD FONTS)
+### 1. HEADINGS & TITLES (LARGE & BOLD FONTS)
 - EVERY heading (`#`, `##`, `###`, `####`) MUST be placed at the VERY START OF THE LINE (the absolute leftmost position).
 - NEVER attach Markdown heading syntax to the end or middle of a sentence in Arabic, Kurdish, or Hebrew.
 - ALWAYS leave an empty line BEFORE and AFTER every heading.
@@ -176,21 +183,21 @@ You are an advanced AI context decorator. Your primary mission is to format ALL 
 - ❌ INCORRECT (NEVER DO THIS):
   ٤. إنشاء الصفحات الأساسية ##
 
-### 2. CODE BLOCKS &amp; COPY CONTAINERS
+### 2. CODE BLOCKS & COPY CONTAINERS
 - ALL code snippets, HTML/CSS, JSON, command-line scripts, or raw queries MUST be enclosed within standard fenced code blocks using triple backticks (```) with the specified language name.
 - NEVER mix inline code with normal sentences unless it is a single keyword.
 - Format structure:
   ```html
-  &lt;div class="card"&gt;
-    &lt;p&gt;Sample Code&lt;/p&gt;
-  &lt;/div&gt;
-  ```</textarea></div>
-<div id="row"><button class="iconbtn" onclick="document.getElementById('sysrow').classList.toggle('show')" title="پرۆمپتی سیستەم">⚙</button><textarea id="inp" placeholder="نامە بۆ مۆدێلەکە بنوسە…" rows="1"></textarea><button class="btn" id="send" onclick="send()">➤</button></div>
-</div>
-</section>
-</main>
+  <div class="card">
+    <p>Sample Code</p>
+  </div>
+  ```
+</script>
 <script>
 let MODELS=[],CUR="",HIST=[];
+let PROTO="";try{PROTO=$("proto").textContent.trim();}catch(e){}
+try{let _s=localStorage.vpx_sys;if(_s)$("sys").value=_s;}catch(e){}
+$("sys").addEventListener("input",e=>{try{localStorage.vpx_sys=e.target.value;}catch(e){}});
 const $=id=>document.getElementById(id);
 function toggleDrawer(force){
  let s=$("side"),o=$("overlay");
@@ -266,7 +273,8 @@ async function send(){
  let t=$("inp").value.trim();if(!t||!CUR)return;
  $("inp").value="";$("inp").style.height="auto";bubble("u",t);
  HIST.push({role:"user",content:t});
- let sys=$("sys").value.trim();
+ let us=$("sys").value.trim();try{localStorage.vpx_sys=$("sys").value;}catch(e){}
+ let sys=us?us+"\\n\\n"+PROTO:PROTO;
  let msgs=(sys?[{role:"system",content:sys}]:[]).concat(HIST.slice(-6));
  let ty=bubble("a","● ● ●");ty.classList.add("typ");
  $("send").disabled=true;

@@ -1135,11 +1135,17 @@ def rl_check(tag, limit=30, window=60):
         return True
 
 
+_SLICE_MEM = [0.0]
+
+
 def cron_slice():
     """Traffic-driven mini-cron (<25s, KV-locked 5min, rotating jobs). Best-effort."""
     import threading as _th
     def _run():
         try:
+            if time.time() - _SLICE_MEM[0] < 300:  # #136: per-instance guard (locks don't persist during gist-ban → stampede)
+                return
+            _SLICE_MEM[0] = time.time()
             try:
                 _seed_load()  # #135: ST پڕ بکە پێش بڕیار (نەک لەسەر بیرگی بەتاڵ mint بکات)
             except Exception:
@@ -1216,7 +1222,7 @@ def cron_slice():
                 except Exception:
                     pass
             try:
-                kv.gist_flush()
+                kv.gist_flush(force=True)  # #136: land this job's outputs (pool/px), 10 smallest-first
             except Exception:
                 pass
         except Exception:

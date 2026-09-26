@@ -270,59 +270,48 @@ def gist_flush(force=False):
         return True
     if now < _G_BACKOFF[0]:
         return False
+    # #136: ONE FILE per PATCH, smallest-first. Multi-file / MB-sized batches
+    # trip GitHub's secondary ("scraping") 403 and NOTHING lands; solo small
+    # PATCHes pass (proven by live gist versions). A 403 on one file must not
+    # poison the rest — small files (locks/counters/px) land first.
     _G_FLUSH_T[0] = now
     try:
-        files = {}
-        for fn, v in list(_G_DIRTY.items()):
-            files[fn] = None if v is None else {"content": v if isinstance(v, str) else str(v)}
-        r = _rq.patch("https://api.github.com/gists/" + _GIST, headers=_g_headers(),
-                      json={"files": files}, timeout=(10, 60))
-        if r.status_code == 403:
-            # secondary rate ban: go quiet 10 min (retries EXTEND the ban)
-            _G_BACKOFF[0] = now + 600
-            return False
+        items = sorted(list(_G_DIRTY.items()),
+                       key=lambda kv: len(kv[1]) if isinstance(kv[1], str) else 0)
+    except Exception:
+        items = list(_G_DIRTY.items())
+    if not force:
+        items = items[:1]
+    else:
+        items = items[:10]
+    _ok = True
+    for fn, v in items:
+        if _t.time() < _G_BACKOFF[0]:
+            _ok = False
+            break
+        try:
+            one = {fn: None if v is None else {"content": v if isinstance(v, str) else str(v)}}
+            r = _rq.patch("https://api.github.com/gists/" + _GIST, headers=_g_headers(),
+                          json={"files": one}, timeout=(10, 60))
+        except Exception:
+            _ok = False
+            continue
         if r.status_code in (200, 201):
+            _G_DIRTY.pop(fn, None)
+            _G_FLUSH_T[0] = _t.time()
             try:
                 _G_FILES[0] = (r.json() or {}).get("files") or _G_FILES[0]
-                _G_FILES[1] = now
+                _G_FILES[1] = _t.time()
             except Exception:
                 pass
-            _G_DIRTY.clear()
-            return True
-        # 422: a null-delete of a missing file poisons the whole batch.
-        # Land the real writes first, then best-effort each delete solo
-        # (a failed solo delete means the file is already gone — drop it).
-        if r.status_code == 422:
-            ok = True
-            keep = {fn: v for fn, v in files.items() if v is not None}
-            if keep:
-                try:
-                    r2 = _rq.patch("https://api.github.com/gists/" + _GIST, headers=_g_headers(),
-                                   json={"files": keep}, timeout=(10, 60))
-                    if r2.status_code == 403:
-                        _G_BACKOFF[0] = now + 600
-                        ok = False
-                    elif r2.status_code in (200, 201):
-                        try:
-                            _G_FILES[0] = (r2.json() or {}).get("files") or _G_FILES[0]
-                            _G_FILES[1] = now
-                        except Exception:
-                            pass
-                        for fn in keep:
-                            _G_DIRTY.pop(fn, None)
-                    else:
-                        ok = False
-                except Exception:
-                    ok = False
-            for fn, v in files.items():
-                if v is None:
-                    _G_DIRTY.pop(fn, None)  # V10.4: no solo storms; deletes re-issued next run
-            try:
-                _G_FILES[0] = {}
-                _G_FILES[1] = 0.0
-            except Exception:
-                pass
-            return ok and not _G_DIRTY
-    except Exception:
-        pass
-    return False
+        elif r.status_code == 403:
+            _G_BACKOFF[0] = _t.time() + 600  # retries EXTEND the ban — go quiet
+            _ok = False
+            break
+        elif r.status_code == 422:
+            # solo null-delete of a missing file (or bad payload) — drop it,
+            # keep going (fresh saves re-dirty the key anyway → self-heals)
+            _G_DIRTY.pop(fn, None)
+        else:
+            _ok = False
+    return _ok and not _G_DIRTY

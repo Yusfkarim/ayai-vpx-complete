@@ -3404,6 +3404,7 @@ def hg_chat(messages, model_id="", timeout=110):
     # default agent directly (it does recon itself: fingerprints, summaries). Fast, 1 credit, always works.
     _bodies = [(_plain, None)]
     last, _polls = None, 0  # #124g: scan ALL tokens (402 instant-skip); ≤3 poll attempts (queue-aware)
+    _maxpolls = 2 if timeout >= 40 else 1  # #124k: fail FAST to sibling/fallback (chat_once caps 50s/model anyway)
     for _k in range(len(_fresh)):
         a = _fresh[(_idx + _k) % len(_fresh)]
         u = a["uuid"]
@@ -3475,12 +3476,12 @@ def hg_chat(messages, model_id="", timeout=110):
             if not _failed:
                 _exh[u] = _now + 600  # #124i: stuck run → token busy (long scan) → cool 10min, route around it
             _polls += 1
-            if _polls >= 3:
+            if _polls >= _maxpolls:
                 try:
                     _hacker_save_acc()
                 except Exception:
                     pass
-                raise last  # 3 stuck/failed polls → give up (fallback covers)
+                raise last  # #124k: give up fast (fallback covers)
             # stuck (queued run?) or failed (refunded) → try next token
     try:
         _hacker_save_acc()

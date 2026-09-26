@@ -109,6 +109,18 @@ def _vpx_gz_save():
 def _vpx_proxy_get(n=3):
     try:
         pxs = kv.kv_jget("vpx:px") or []
+        if not pxs:
+            # #134: gist banned/empty → mem pool, then px seed file
+            # (without this ALL minting is direct-IP → Firebase/piax throttle it)
+            try:
+                pxs = [p for p in (R.PROXY_ST.get("pool") or {})][:80]
+            except Exception:
+                pass
+            if not pxs:
+                try:
+                    pxs = (_seed_file("px") or {}).get("proxies") or []
+                except Exception:
+                    pass
         random.shuffle(pxs)
         return pxs[:max(1, int(n))]
     except Exception:
@@ -164,6 +176,11 @@ def _seed_load():
             pass
     try:  # #119: cold instances have empty proxy mem → proxy-first silently degrades to direct
         _pxs = kv.kv_jget("vpx:px") or []
+        if not _pxs:
+            try:  # #134: gist banned/empty → px seed file (31 verified working)
+                _pxs = (_seed_file("px") or {}).get("proxies") or []
+            except Exception:
+                pass
         _pool = R.PROXY_ST.setdefault("pool", {})
         for _p in _pxs[:200]:
             _pool.setdefault(_p, {"t": time.time(), "lat": 9})
@@ -176,6 +193,31 @@ def _mk_saver(name):
     def _save():
         try:
             st = getattr(R, attr)
+            try:  # #134: UNION with persisted copy — 5 doors × N instances each
+                # save whole-state; without merge the last writer silently
+                # DELETES accounts minted by every other instance.
+                g = kv.kv_jget(key) or {}
+                ga = g.get("accounts") or []
+                if ga and isinstance(ga, list):
+                    have = set()
+                    for _a in st.get("accounts") or []:
+                        if isinstance(_a, dict):
+                            have.add(_a.get("email") or _a.get("uid") or _a.get("localId"))
+                    _mine = st.setdefault("accounts", [])
+                    for _a in ga:
+                        if isinstance(_a, dict) and (_a.get("email") or _a.get("uid") or _a.get("localId")) not in have:
+                            _mine.append(_a)
+                    for _k in ("limits", "exhausted"):
+                        if isinstance(g.get(_k), dict):
+                            _d = st.setdefault(_k, {})
+                            for _ek, _ev in g[_k].items():
+                                if _ek not in _d:
+                                    _d[_ek] = _ev
+                    _gs, _ss = g.get("signups") or {}, st.get("signups") or {}
+                    if isinstance(_gs, dict) and isinstance(_ss, dict) and _gs.get("date") and _gs.get("date") == _ss.get("date"):
+                        _ss["n"] = max(int(_ss.get("n") or 0), int(_gs.get("n") or 0))
+            except Exception:
+                pass
             slim = {k: (v[-10000:] if k == "accounts" and isinstance(v, list) else v)
                     for k, v in st.items()}
             kv.kv_jset(key, slim)
@@ -1104,8 +1146,8 @@ def cron_slice():
                 for _pn in ("ca", "cb", "nv"):
                     try:
                         _st = getattr(R, _pn.upper() + "_ST")
-                        if len(_st.get("accounts") or []) < 1000:  # #120: slice guards MINIMUM only (fast chat); 1000→2000 growth rides cron topup (150s budget)
-                            mint_fb_pool(_pn, count=3)
+                        if len(_st.get("accounts") or []) < 2000:  # #134: was <1000 — pools NEVER refilled to 2000 (user standing order); slice now guards the full 2000
+                            mint_fb_pool(_pn, count=4)
                     except Exception:
                         pass
                 for _pn in ("ac", "al", "alle", "pia"):
@@ -1445,7 +1487,10 @@ def api_status():
         "failctr": len(kv.kv_jget("vpx:failctr") or {}),
         "gist_backoff_s": _bo_left,
         "kv_backend": "rest" if kv.use_rest() else ("gist" if kv.use_gist() else "memory"),
-        "proxies": len(kv.kv_jget("vpx:px") or []),
+        "proxies": len(kv.kv_jget("vpx:px") or []) or len(
+            (_seed_file("px") or {}).get("proxies") or []),
+        "proxies_src": ("gist" if (kv.kv_jget("vpx:px") or []) else
+                        ("seed" if ((_seed_file("px") or {}).get("proxies") or []) else "none")),
         "keys": {"VAPI_KEY": bool(API_KEY), "CA_FB_KEY": bool(FB_KEYS["ca"]),
                  "CB_FB_KEY": bool(FB_KEYS["cb"]), "NV_FB_KEY": bool(FB_KEYS["nv"]),
                  "AC_FB_KEY": bool(R.AC_KEY), "AL_KEY": bool(R.AL_KEY),

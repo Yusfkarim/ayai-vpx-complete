@@ -50,8 +50,8 @@ def hit(nbytes=0):
                 pass
             return
         now = time.time()
-        if (_MEM["n"] - _MEM["saved_n"] >= 10
-                or (now - _MEM.get("saved_t", 0) > 60
+        if (_MEM["n"] - _MEM["saved_n"] >= 200
+                or (now - _MEM.get("saved_t", 0) > 600
                     and _MEM["n"] > _MEM["saved_n"])):
             kv.kv_jset(_key(m), {"n": _MEM["n"], "b": _MEM["b"], "t": now})
             _MEM["saved_n"] = _MEM["n"]

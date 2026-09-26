@@ -139,6 +139,30 @@ class handler(BaseHTTPRequestHandler):
             except Exception as e:
                 out["px"] = {"err": str(e)[:80]}
             self._flush_if_slow(t0)
+        if left() > 10 and _n % 2 == 1:
+            # #134: delete usage shards older than 2 days (cap 30/run) —
+            # 280+ stale shards bloat every gist GET/PATCH and slow persistence.
+            try:
+                _fm = providers.kv._g_files() or {}
+                _cut = time.time() - 172800
+                _gone = 0
+                for _fn in sorted(_fm):
+                    if _gone >= 30 or not _fn.startswith("vpx-usage-"):
+                        continue
+                    try:
+                        _t = float((json.loads((_fm[_fn] or {}).get("content") or "{}") or {}).get("t", 0))
+                    except Exception:
+                        _t = 0
+                    if _t and _t < _cut:
+                        try:
+                            providers.kv.kv_delete(_fn[:-5])
+                            _gone += 1
+                        except Exception:
+                            pass
+                out["shard_gc"] = {"deleted": _gone}
+            except Exception as e:
+                out["shard_gc"] = {"err": str(e)[:60]}
+            self._flush_if_slow(t0)
         try:
             out["catalog"] = {"models": len(providers.full_catalog())}
         except Exception as e:

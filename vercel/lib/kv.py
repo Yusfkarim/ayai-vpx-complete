@@ -263,7 +263,10 @@ def gist_flush(force=False):
     now = _t.time()
     if not _G_DIRTY:
         return True
-    if not force and now - _G_FLUSH_T[0] < 25:
+    # #134: 25s→120s+jitter — dozens of serverless instances cold-starting and
+    # PATCHing one gist at once = GitHub secondary-ban (403 on EVERY write,
+    # pools+proxies never persist). Rare flushes let the ban lift for good.
+    if not force and now - _G_FLUSH_T[0] < 120 + (now * 7 + _os.getpid()) % 60:
         return True
     if now < _G_BACKOFF[0]:
         return False

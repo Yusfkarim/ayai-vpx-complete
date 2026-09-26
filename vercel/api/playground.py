@@ -71,6 +71,21 @@ section{flex:1;display:flex;flex-direction:column;min-width:0;min-height:0}
 #send{height:50px;padding:0 22px;font-size:15px}
 .iconbtn{background:var(--card);color:#b9a8ff;border:1px solid var(--line);border-radius:10px;height:50px;width:50px;font-size:18px;flex-shrink:0}
 .typ{color:var(--mut);font-size:13px}
+.msg h1,.msg h2,.msg h3,.msg h4{font-weight:800;line-height:1.3;margin:12px 0 6px;text-align:start}
+.msg h1:first-child,.msg h2:first-child,.msg h3:first-child,.msg h4:first-child{margin-top:0}
+.msg h1{font-size:22px;border-bottom:1px solid var(--line);padding-bottom:6px}
+.msg h2{font-size:19px}
+.msg h3{font-size:16px}
+.msg h4{font-size:14px}
+.msg p{margin:4px 0}
+.msg ul,.msg ol{margin:6px 0;padding-inline-start:22px}
+.msg li{margin:3px 0}
+.msg hr{border:none;border-top:1px solid var(--line);margin:12px 0}
+.msg blockquote{border-inline-start:3px solid var(--acc);padding:6px 12px;margin:8px 0;color:#c9c9da;background:rgba(124,92,240,.08);border-radius:8px}
+.msg code{background:#0a0a12;border:1px solid var(--line);border-radius:6px;padding:1px 6px;font-size:12.5px;font-family:ui-monospace,Menlo,Consolas,monospace}
+.cb{margin:8px 0;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#0a0a12}
+.cbl{font-size:11px;color:#b9a8ff;background:#14141f;padding:5px 12px;border-bottom:1px solid var(--line);font-weight:700}
+.cb pre{margin:0;padding:10px 12px;overflow-x:auto;font-size:12.5px;line-height:1.55;font-family:ui-monospace,Menlo,Consolas,monospace;white-space:pre;text-align:left}
 @media(max-width:820px){
  #burger{display:block}
  nav{display:none}
@@ -102,7 +117,32 @@ section{flex:1;display:flex;flex-direction:column;min-width:0;min-height:0}
 <div id="cur"><span style="color:var(--mut);font-size:13px">Model:</span><span class="pill" id="curm">—</span><button class="ghost" onclick="testCurrent()" style="margin-left:auto">⚡ Test</button><button class="ghost" onclick="clearChat()">Clear</button></div>
 <div id="msgs"><div class="hero" id="hero"><div class="big">💬</div><h2>Pick a model & start chatting</h2><p>190+ free AI models, no login, no API key.<br>Tap ☰ to browse models, ⚡ to test if one answers.</p><div class="hint">⚡ = test model directly &nbsp;•&nbsp; 🔄 = fetch newest models</div></div></div>
 <div id="box">
-<div id="sysrow"><textarea id="sys" rows="2" placeholder="System prompt (optional personality)…"></textarea></div>
+<div id="sysrow" class="show"><textarea id="sys" rows="8" placeholder="System prompt…"># 🎨 SYSTEM INSTRUCTION: ABSOLUTE MARKDOWN &amp; VISUAL FORMATTING PROTOCOL
+
+You are an advanced AI context decorator. Your primary mission is to format ALL generated text with strict Markdown compliance, exceptional typography, visual hierarchy, and precise RTL/LTR text alignment.
+
+---
+
+## 🚨 MANDATORY FORMATTING RULES (STRICT COMPLIANCE)
+
+### 1. HEADINGS &amp; TITLES (LARGE &amp; BOLD FONTS)
+- EVERY heading (`#`, `##`, `###`, `####`) MUST be placed at the VERY START OF THE LINE (the absolute leftmost position).
+- NEVER attach Markdown heading syntax to the end or middle of a sentence in Arabic, Kurdish, or Hebrew.
+- ALWAYS leave an empty line BEFORE and AFTER every heading.
+- ✅ CORRECT:
+  ## ٤. إنشاء الصفحات الأساسية
+- ❌ INCORRECT (NEVER DO THIS):
+  ٤. إنشاء الصفحات الأساسية ##
+
+### 2. CODE BLOCKS &amp; COPY CONTAINERS
+- ALL code snippets, HTML/CSS, JSON, command-line scripts, or raw queries MUST be enclosed within standard fenced code blocks using triple backticks (```) with the specified language name.
+- NEVER mix inline code with normal sentences unless it is a single keyword.
+- Format structure:
+  ```html
+  &lt;div class="card"&gt;
+    &lt;p&gt;Sample Code&lt;/p&gt;
+  &lt;/div&gt;
+  ```</textarea></div>
 <div id="row"><button class="iconbtn" onclick="document.getElementById('sysrow').classList.toggle('show')" title="System prompt">⚙</button><textarea id="inp" placeholder="Message the model…" rows="1"></textarea><button class="btn" id="send" onclick="send()">➤</button></div>
 </div>
 </section>
@@ -175,7 +215,7 @@ $("list").addEventListener("click",e=>{
 function pick(id){CUR=id;$("curm").textContent=id;HIST=[];$("msgs").innerHTML="";renderList($("q").value);toggleDrawer(false);}
 function bubble(who,text,meta){
  let h=$("hero");if(h)h.remove();
- let d=document.createElement("div");d.className="msg "+who;d.textContent=text;
+ let d=document.createElement("div");d.className="msg "+who;d.setAttribute("dir","auto");d.textContent=text;
  if(meta){let m=document.createElement("div");m.className="meta";m.textContent=meta;d.appendChild(m);}
  $("msgs").appendChild(d);$("msgs").scrollTop=1e9;return d;
 }
@@ -198,10 +238,29 @@ async function send(){
  }catch(e){ty.textContent="⚠️ "+e;}
  $("send").disabled=false;
 }
+function renderMd(t){
+ let e=esc(t),code=[];
+ e=e.replace(/```(\\w*)\\n([\\s\\S]*?)```/g,(m,l,c)=>{code.push({l:l||"code",c:c.replace(/\\n$/,"")});return "\\x00"+(code.length-1)+"\\x00";});
+ let html="",inul=false,inol=false;
+ const inline=s=>s.replace(/`([^`\\n]+)`/g,"<code>$1</code>").replace(/\\*\\*([^*]+)\\*\\*/g,"<b>$1</b>").replace(/(^|[\\s(])\\*([^\\*\\n]+)\\*/g,"$1<i>$2</i>");
+ for(let ln of e.split("\\n")){
+  let m,trim=ln.trim();
+  if(/^\\x00\\d+\\x00$/.test(trim)){if(inul){html+="</ul>";inul=false;}if(inol){html+="</ol>";inol=false;}let b=code[+trim.slice(1,-1)];html+="<div class='cb'><div class='cbl'>"+b.l+"</div><pre>"+b.c+"</pre></div>";continue;}
+  if(m=ln.match(/^(#{1,4})\\s+(.*)$/)){if(inul){html+="</ul>";inul=false;}if(inol){html+="</ol>";inol=false;}html+="<h"+m[1].length+">"+inline(m[2].replace(/\\s#+$/,""))+"</h"+m[1].length+">";continue;}
+  if(/^-{3,}$/.test(trim)){if(inul){html+="</ul>";inul=false;}if(inol){html+="</ol>";inol=false;}html+="<hr>";continue;}
+  if(m=ln.match(/^&gt;\\s?(.*)$/)){if(inul){html+="</ul>";inul=false;}if(inol){html+="</ol>";inol=false;}html+="<blockquote>"+inline(m[1])+"</blockquote>";continue;}
+  if(m=ln.match(/^(\\d+)[.)]\\s+(.*)$/)){if(inul){html+="</ul>";inul=false;}if(!inol){html+="<ol>";inol=true;}html+="<li>"+inline(m[2])+"</li>";continue;}
+  if(m=ln.match(/^[-*]\\s+(.*)$/)){if(inol){html+="</ol>";inol=false;}if(!inul){html+="<ul>";inul=true;}html+="<li>"+inline(m[1])+"</li>";continue;}
+  if(!trim){if(inul){html+="</ul>";inul=false;}if(inol){html+="</ol>";inol=false;}continue;}
+  html+="<p>"+inline(ln)+"</p>";
+ }
+ if(inul)html+="</ul>";if(inol)html+="</ol>";
+ return html;
+}
 function stream(el,full,meta){
  let i=0;el.textContent="";
  let iv=setInterval(()=>{i+=16;el.textContent=full.slice(0,i);
-  if(i>=full.length){clearInterval(iv);let m=document.createElement("div");m.className="meta";m.textContent=meta;el.appendChild(m);}},25);
+  if(i>=full.length){clearInterval(iv);el.innerHTML=renderMd(full);let m=document.createElement("div");m.className="meta";m.textContent=meta;el.appendChild(m);}},25);
 }
 async function testModel(id,idx){
  let sl=document.querySelectorAll('[id="t'+idx+'"]');

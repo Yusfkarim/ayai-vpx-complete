@@ -3353,21 +3353,15 @@ def hg_chat(messages, model_id="", timeout=110):
     except Exception:
         ms = []
     lines = []
-    # #124h: ALWAYS full prefixed transcript — bare "check X" triggers slow site-side tool scans (minutes);
-    # "System:/User:"-framed text gets fast chat answers (with recon flavor). All 3 IDs share this path.
+    # #125: RAW like worm — drop ALL system msgs (no manhaj/KB/tools), plain user/assistant contents direct to site
     for m in ms:
         if not isinstance(m, dict):
             continue
-        c = (m.get("content") or "").strip()
-        if not c:
+        if m.get("role") == "system":
             continue
-        r = m.get("role")
-        if r == "system":
-            lines.append("System: " + c)
-        elif r == "assistant":
-            lines.append("Assistant: " + c)
-        else:
-            lines.append("User: " + c)
+        c = (m.get("content") or "").strip()
+        if c:
+            lines.append(c)
     lines = lines[-16:]
     text = "\n".join(lines).strip()[:6000]
     if not text:

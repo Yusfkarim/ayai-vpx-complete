@@ -746,7 +746,7 @@ def chat(model_id, messages, timeout=110):
                     break
     except Exception:
         pass
-    if not str(model_id).startswith("worm-"):  # #123h: worm = raw-or-nothing (never fall back to prompted models)
+    if not (str(model_id).startswith("worm-") or str(model_id).startswith("hacker-")):  # #123h/#125: worm+hacker raw-or-nothing (never fall back to prompted models)
         order += ["pol-openai", "lr-nano"]
         try:
             affs = aff_models()

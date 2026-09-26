@@ -195,10 +195,10 @@ You are an advanced AI context decorator. Your primary mission is to format ALL 
 </script>
 <script>
 let MODELS=[],CUR="",HIST=[];
+const $=id=>document.getElementById(id);
 let PROTO="";try{PROTO=$("proto").textContent.trim();}catch(e){}
 try{let _s=localStorage.vpx_sys;if(_s)$("sys").value=_s;}catch(e){}
 $("sys").addEventListener("input",e=>{try{localStorage.vpx_sys=e.target.value;}catch(e){}});
-const $=id=>document.getElementById(id);
 function toggleDrawer(force){
  let s=$("side"),o=$("overlay");
  let open=(force!==undefined)?force:!s.classList.contains("open");

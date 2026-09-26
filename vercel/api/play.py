@@ -74,22 +74,7 @@ class handler(BaseHTTPRequestHandler):
                 clean.append({"role": r, "content": c})
         if not clean:
             return self._send(400, {"error": "empty messages"})
-        _GEMINI_RAW = "gemini" in model.lower()  # #129: playground gemini = user's prompt ONLY (no kb/manhaj merge); API unchanged
-        if not _GEMINI_RAW:
-            try:
-                _hist = [m for m in clean if m.get("role") in ("user", "assistant")][-3:]
-                _qtext = " ".join(str(m.get("content") or "") for m in _hist)
-                _hits = kb.search(_qtext) if kb.detect(_qtext) else []
-                if _hits:
-                    clean = [{"role": "system", "content": kb.prompt(_hits)}] + clean
-            except Exception:
-                pass
-            try:
-                _mh = [m for m in clean if isinstance(m, dict) and m.get("role") in ("user", "assistant")][-3:]
-                _mtext = " ".join(str(m.get("content") or "") for m in _mh)
-                clean = [{"role": "system", "content": manhaj.prompt(_mtext)}] + clean
-            except Exception:
-                pass
+        # #130: playground = user's prompt ONLY for ALL models (no kb/manhaj merge); API unchanged
         t0 = time.time()
         try:
             if data.get("direct"):

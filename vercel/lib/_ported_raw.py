@@ -3165,10 +3165,8 @@ def _worm_key():
 
 
 def worm_servers():
-    # static trio (cached 6h by _pool_cat); pro/max may 402 on free keys → graceful error
-    return [{"id": "worm-free", "model_id": "free", "name": "WormGPT Free"},
-            {"id": "worm-pro", "model_id": "pro", "name": "WormGPT Plus"},
-            {"id": "worm-max", "model_id": "max", "name": "WormGPT Max"}]
+    # #126: FREE ONLY (pro/max removed — paid-only server-side); unlimited guest use
+    return [{"id": "worm-free", "model_id": "free", "name": "WormGPT Free"}]
 
 
 _WORM_FA = ("هستم", "هستند", "می‌", " است ", "بخواهی", "می‌خواهی", "خواهی", "نمی‌",

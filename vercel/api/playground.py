@@ -86,6 +86,11 @@ section{flex:1;display:flex;flex-direction:column;min-width:0;min-height:0}
 .cb{margin:8px 0;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#0a0a12}
 .cbl{font-size:11px;color:#b9a8ff;background:#14141f;padding:5px 12px;border-bottom:1px solid var(--line);font-weight:700}
 .cb pre{margin:0;padding:10px 12px;overflow-x:auto;font-size:12.5px;line-height:1.55;font-family:ui-monospace,Menlo,Consolas,monospace;white-space:pre;text-align:left}
+.cbl{display:flex;align-items:center;justify-content:space-between}
+.cpb{background:#241a4d;color:#d9ccff;border:1px solid var(--acc);border-radius:8px;font-size:11px;padding:4px 10px;min-height:0;font-weight:700}
+.cpb:hover{background:var(--acc);color:#fff}
+.cpb2{display:inline-block;margin-top:8px;background:var(--card);color:#b9a8ff;border:1px solid var(--line);border-radius:9px;font-size:12px;padding:7px 14px;font-weight:700}
+.cpb2:hover{border-color:var(--acc);color:#fff}
 @media(max-width:820px){
  #burger{display:block}
  nav{display:none}
@@ -238,6 +243,14 @@ async function send(){
  }catch(e){ty.textContent="⚠️ "+e;}
  $("send").disabled=false;
 }
+function cpText(t,btn){
+ const done=()=>{if(!btn)return;let o=btn.textContent;btn.textContent="\u2713 \u0643\u0648\u067e\u0649 \u06a9\u0631\u0627";setTimeout(()=>{btn.textContent=o;},1500);};
+ if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(t).then(done).catch(()=>fallbackCp(t,done));}
+ else fallbackCp(t,done);
+}
+function fallbackCp(t,done){try{let ta=document.createElement("textarea");ta.value=t;ta.style.position="fixed";ta.style.opacity="0";document.body.appendChild(ta);ta.select();document.execCommand("copy");ta.remove();done();}catch(e){}}
+function cpCode(btn){let cb=btn.closest?btn.closest(".cb"):null;let pre=cb?cb.querySelector("pre"):null;if(pre)cpText(pre.textContent,btn);}
+function cpMsg(btn){let b=btn.closest?btn.closest(".msg"):null;if(b&&b._raw!==undefined)cpText(b._raw,btn);else if(b)cpText(b.textContent,btn);}
 function renderMd(t){
  let e=esc(t),code=[];
  e=e.replace(/```(\\w*)\\n([\\s\\S]*?)```/g,(m,l,c)=>{code.push({l:l||"code",c:c.replace(/\\n$/,"")});return "\\x00"+(code.length-1)+"\\x00";});
@@ -245,7 +258,7 @@ function renderMd(t){
  const inline=s=>s.replace(/`([^`\\n]+)`/g,"<code>$1</code>").replace(/\\*\\*([^*]+)\\*\\*/g,"<b>$1</b>").replace(/(^|[\\s(])\\*([^\\*\\n]+)\\*/g,"$1<i>$2</i>");
  for(let ln of e.split("\\n")){
   let m,trim=ln.trim();
-  if(/^\\x00\\d+\\x00$/.test(trim)){if(inul){html+="</ul>";inul=false;}if(inol){html+="</ol>";inol=false;}let b=code[+trim.slice(1,-1)];html+="<div class='cb'><div class='cbl'>"+b.l+"</div><pre>"+b.c+"</pre></div>";continue;}
+  if(/^\\x00\\d+\\x00$/.test(trim)){if(inul){html+="</ul>";inul=false;}if(inol){html+="</ol>";inol=false;}let b=code[+trim.slice(1,-1)];html+="<div class='cb'><div class='cbl'><span>"+b.l+"</span><button class='cpb' onclick='cpCode(this)'>\u29c9 \u06a9\u0648\u067e\u0649</button></div><pre>"+b.c+"</pre></div>";continue;}
   if(m=ln.match(/^(#{1,4})\\s+(.*)$/)){if(inul){html+="</ul>";inul=false;}if(inol){html+="</ol>";inol=false;}html+="<h"+m[1].length+">"+inline(m[2].replace(/\\s#+$/,""))+"</h"+m[1].length+">";continue;}
   if(/^-{3,}$/.test(trim)){if(inul){html+="</ul>";inul=false;}if(inol){html+="</ol>";inol=false;}html+="<hr>";continue;}
   if(m=ln.match(/^&gt;\\s?(.*)$/)){if(inul){html+="</ul>";inul=false;}if(inol){html+="</ol>";inol=false;}html+="<blockquote>"+inline(m[1])+"</blockquote>";continue;}
@@ -260,7 +273,7 @@ function renderMd(t){
 function stream(el,full,meta){
  let i=0;el.textContent="";
  let iv=setInterval(()=>{i+=16;el.textContent=full.slice(0,i);
-  if(i>=full.length){clearInterval(iv);el.innerHTML=renderMd(full);let m=document.createElement("div");m.className="meta";m.textContent=meta;el.appendChild(m);}},25);
+  if(i>=full.length){clearInterval(iv);el._raw=full;el.innerHTML=renderMd(full);let m=document.createElement("div");m.className="meta";m.textContent=meta;el.appendChild(m);let cb=document.createElement("button");cb.className="cpb2";cb.textContent="\u29c9 \u06a9\u0648\u067e\u0649 \u0646\u0627\u0645\u06d5";cb.onclick=function(){cpMsg(this);};el.appendChild(cb);}},25);
 }
 async function testModel(id,idx){
  let sl=document.querySelectorAll('[id="t'+idx+'"]');

@@ -371,7 +371,7 @@ def aiml_models(): return _pool_cat("aiml", R.aiml_servers)
 def mc_models(): return []  # no-Fly: hih needs browser-minter (Fly keeps mc)
 def pia_models(): return _pool_cat("pia", R.pia_servers)
 def cbox_models(): return _pool_cat("cbox", R.cbox_servers)
-def worm_models(): return _pool_cat("worm", R.worm_servers)  # #123
+def worm_models(): return [it for it in _pool_cat("worm", R.worm_servers) if it.get("id") == "worm-free"]  # #126: FREE ONLY (pro/max paid — filtered even from stale cache)
 def hacker_models(): return _pool_cat("hacker", R.hg_servers)  # #124
 
 def full_catalog():

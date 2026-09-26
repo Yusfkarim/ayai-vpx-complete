@@ -11,7 +11,7 @@ PAGE = """<!DOCTYPE html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
-<title>AYAI-VPX Playground</title>
+<title>AYAI-VPX | یاریگا</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{--bg:#08080d;--panel:#0d0d15;--card:#14141f;--line:#212130;--txt:#e9e9f2;--mut:#8e8ea6;--acc:#7c5cf0;--acc2:#b18cff}
@@ -137,7 +137,7 @@ section{flex:1;display:flex;flex-direction:column;min-width:0;min-height:0}
 .mrow{-webkit-tap-highlight-color:transparent}
 .mrow:active{background:#2a2156}
 #msgs{max-width:900px;margin:0 auto;width:100%}
-#inp{border-radius:18px}
+#inp{border-radius:18px;max-height:140px}
 .hero h2{background:linear-gradient(90deg,#c4b5fd,#f0abfc);-webkit-background-clip:text;background-clip:text;color:transparent;font-size:24px}
 </style>
 </head>
@@ -145,21 +145,21 @@ section{flex:1;display:flex;flex-direction:column;min-width:0;min-height:0}
 <header>
 <button id="burger" onclick="toggleDrawer()">☰</button>
 <div class="logo">▲ AYAI-VPX</div>
-<nav><a href="/playground">Playground</a><a href="/">Dashboard</a><a href="/v1/models">Models API</a><a href="/api/status">Status</a></nav>
-<div class="hstat"><b id="mcount">…</b> models • free, no key needed</div>
+<nav><a href="/playground">یاریگا</a><a href="/">داشبۆرد</a><a href="/v1/models">API مۆدێلەکان</a><a href="/api/status">دۆخ</a></nav>
+<div class="hstat"><b id="mcount">…</b> مۆدێل • خۆڕایی، کلیت ناوێت</div>
 </header>
 <div id="overlay" onclick="toggleDrawer(false)"></div>
 <main>
 <aside id="side">
-<div class="tools"><input id="q" placeholder="🔍 Search models…"><button class="ghost" id="rf" onclick="refreshModels()" title="Fetch newest models">🔄</button></div>
+<div class="tools"><input id="q" placeholder="🔍 گەڕان بەدوای مۆدێل…"><button class="ghost" id="rf" onclick="refreshModels()" title="هێنانی نوێترین مۆدێلەکان">🔄</button></div>
 <div id="mstat" style="padding:8px 12px;font-size:12px;color:var(--mut);border-bottom:1px solid var(--line)">…</div>
 <div id="list"></div>
 </aside>
 <section>
-<div id="cur"><span style="color:var(--mut);font-size:13px">Model:</span><span class="pill" id="curm">—</span><button class="ghost" onclick="testCurrent()" style="margin-left:auto">⚡ Test</button><button class="ghost" onclick="clearChat()">Clear</button></div>
-<div id="msgs"><div class="hero" id="hero"><div class="big">💬</div><h2>Pick a model & start chatting</h2><p>190+ free AI models, no login, no API key.<br>Tap ☰ to browse models, ⚡ to test if one answers.</p><div class="hint">⚡ = test model directly &nbsp;•&nbsp; 🔄 = fetch newest models</div></div></div>
+<div id="cur"><span style="color:var(--mut);font-size:13px">مۆدێل:</span><span class="pill" id="curm">—</span><button class="ghost" onclick="testCurrent()" style="margin-left:auto">⚡ تاقیکردنەوە</button><button class="ghost" onclick="clearChat()">سڕینەوە</button></div>
+<div id="msgs"><div class="hero" id="hero"><div class="big">💬</div><h2>مۆدێلێک هەڵبژێرە و دەستپێبکە</h2><p>زیاتر لە 190 مۆدێلی AI خۆڕایی، بەبێ چوونەژوور و کلیت.<br>کرتە لە ☰ بکە بۆ مۆدێلەکان و ⚡ بۆ تاقیکردنەوە.</p><div class="hint">⚡ = تاقیکردنەوەی ڕاستەوخۆ &nbsp;•&nbsp; 🔄 = نوێکردنەوەی مۆدێلەکان</div></div></div>
 <div id="box">
-<div id="sysrow"><textarea id="sys" rows="8" placeholder="System prompt…"># 🎨 SYSTEM INSTRUCTION: ABSOLUTE MARKDOWN &amp; VISUAL FORMATTING PROTOCOL
+<div id="sysrow"><textarea id="sys" rows="8" placeholder="پرۆمپتی سیستەم…"># 🎨 SYSTEM INSTRUCTION: ABSOLUTE MARKDOWN &amp; VISUAL FORMATTING PROTOCOL
 
 You are an advanced AI context decorator. Your primary mission is to format ALL generated text with strict Markdown compliance, exceptional typography, visual hierarchy, and precise RTL/LTR text alignment.
 
@@ -185,7 +185,7 @@ You are an advanced AI context decorator. Your primary mission is to format ALL 
     &lt;p&gt;Sample Code&lt;/p&gt;
   &lt;/div&gt;
   ```</textarea></div>
-<div id="row"><button class="iconbtn" onclick="document.getElementById('sysrow').classList.toggle('show')" title="System prompt">⚙</button><textarea id="inp" placeholder="Message the model…" rows="1"></textarea><button class="btn" id="send" onclick="send()">➤</button></div>
+<div id="row"><button class="iconbtn" onclick="document.getElementById('sysrow').classList.toggle('show')" title="پرۆمپتی سیستەم">⚙</button><textarea id="inp" placeholder="نامە بۆ مۆدێلەکە بنوسە…" rows="1"></textarea><button class="btn" id="send" onclick="send()">➤</button></div>
 </div>
 </section>
 </main>
@@ -220,7 +220,7 @@ function updStat(){
  let ok=0,bad=0;
  for(let k in TESTRES){if(TESTRES[k]&&TESTRES[k].ok)ok++;else bad++;}
  let nw=Object.keys(NEWSET).length;
- $("mstat").textContent=MODELS.length+" models • ✅ "+ok+" live • ❌ "+bad+(nw?" • ✨ "+nw+" new":"");
+ $("mstat").textContent=MODELS.length+" مۆدێل • ✅ "+ok+" زیندوو • ❌ "+bad+(nw?" • ✨ "+nw+" نوێ":"");
 }
 function esc(s){return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}
 function renderList(q){
@@ -234,7 +234,7 @@ function renderList(q){
  let h="";
  let ni=[];for(let i=0;i<MODELS.length;i++){let id=MODELS[i];if(NEWSET[id]&&(!q||id.toLowerCase().indexOf(q)>=0))ni.push(i);}
  if(ni.length){
-  h+="<div class='grp'><h4>✨ New · "+ni.length+"</h4>";
+  h+="<div class='grp'><h4>✨ نوێ · "+ni.length+"</h4>";
   for(let i of ni){let id=MODELS[i];let tr=TESTRES[id];h+="<div class='mrow"+(id===CUR?" sel":"")+"' data-i='"+i+"'><span class='nm'>🆕 "+esc(id)+"</span><span class='tok' id='t"+i+"'>"+(tr?(tr.ok?"✅":"❌"):"")+"</span><button class='tbtn' data-t='"+i+"'>⚡</button></div>";}
   h+="</div>";
  }
@@ -246,7 +246,7 @@ function renderList(q){
   }
   h+="</div>";
  }
- $("list").innerHTML=h||"No models";
+ $("list").innerHTML=h||"هیچ مۆدێلێک نییە";
 }
 $("list").addEventListener("click",e=>{
  let t=e.target;
@@ -264,7 +264,7 @@ function bubble(who,text,meta){
 function clearChat(){HIST=[];$("msgs").innerHTML="";}
 async function send(){
  let t=$("inp").value.trim();if(!t||!CUR)return;
- $("inp").value="";bubble("u",t);
+ $("inp").value="";$("inp").style.height="auto";bubble("u",t);
  HIST.push({role:"user",content:t});
  let sys=$("sys").value.trim();
  let msgs=(sys?[{role:"system",content:sys}]:[]).concat(HIST.slice(-6));
@@ -276,7 +276,7 @@ async function send(){
   let d=await r.json();
   ty.classList.remove("typ");
   if(!r.ok){ty.textContent="⚠️ "+(d.error||r.status);}
-  else{HIST.push({role:"assistant",content:d.text});stream(ty,d.text,"via "+d.used+" · "+d.seconds+"s");}
+  else{HIST.push({role:"assistant",content:d.text});stream(ty,d.text,"لەڕێگەی "+d.used+" · "+d.seconds+" چرکە");}
  }catch(e){ty.textContent="⚠️ "+e;}
  $("send").disabled=false;
 }
@@ -351,13 +351,14 @@ async function refreshModels(){
  try{
   let r=await fetch("/api/refresh",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({})});
   let d=await r.json();
-  if(!r.ok)alert("Refresh failed: "+(d.error||r.status));
-  else{alert("Synced "+d.sync_ok+"/"+d.sync_total+" sources · "+d.models+" models");await loadModels();}
- }catch(e){alert("Refresh error: "+e);}
+  if(!r.ok)alert("نوێکردنەوە شکستی هێنا: "+(d.error||r.status));
+  else{alert("هاوکاتی کرا "+d.sync_ok+"/"+d.sync_total+" سەرچاوە · "+d.models+" مۆدێل");await loadModels();}
+ }catch(e){alert("هەڵەی نوێکردنەوە: "+e);}
  $("rf").disabled=false;$("rf").textContent="🔄";
 }
 $("q").addEventListener("input",e=>renderList(e.target.value));
 $("inp").addEventListener("keydown",e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();send();}});
+$("inp").addEventListener("input",e=>{let t=e.target;t.style.height="auto";t.style.height=Math.min(t.scrollHeight,140)+"px";});
 loadModels();
 </script>
 </body>

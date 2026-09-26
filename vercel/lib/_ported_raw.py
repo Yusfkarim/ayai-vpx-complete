@@ -3339,10 +3339,71 @@ def _hg_merge_file():
         pass
 
 
+def _hacker_load_acc():
+    """#127: overlay persisted used/idx/exhausted from gist (60s mem cache; shared across instances/doors)."""
+    try:
+        import time as _t
+        _c = globals().setdefault("_HG_LC", {"t": 0, "d": {}})
+        if _t.time() - float(_c.get("t") or 0) < 60 and isinstance(_c.get("d"), dict):
+            d = _c["d"]
+        else:
+            import kv as _kv
+            d = _kv.kv_jget("vpx:hg") or {}
+            _c.update({"t": _t.time(), "d": d if isinstance(d, dict) else {}})
+        if not isinstance(d, dict):
+            return
+        _used = d.get("used") or {}
+        for a in HACKER_ST.get("accounts") or []:
+            try:
+                u = a.get("uuid")
+                if u in _used:
+                    a["used"] = max(int(a.get("used") or 0), int(_used[u] or 0))
+            except Exception:
+                pass
+        try:
+            HACKER_ST["idx"] = max(int(HACKER_ST.get("idx") or 0), int(d.get("idx") or 0))
+        except Exception:
+            pass
+        _now = _t.time()
+        for u, v in (d.get("exh") or {}).items():
+            try:
+                if isinstance(v, (int, float)) and float(v) > _now:
+                    HACKER_ST.setdefault("exhausted", {})[u] = v
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+
+def _hacker_save_acc():
+    """#127: persist used/idx/exhausted to gist (throttled 120s; was missing → NameError → rotation lost)."""
+    try:
+        import time as _t
+        if _t.time() - float(globals().get("_HG_SAVE_T") or 0) < 120:
+            return
+        globals()["_HG_SAVE_T"] = _t.time()
+        import kv as _kv
+        _used = {}
+        for a in HACKER_ST.get("accounts") or []:
+            try:
+                if a.get("uuid"):
+                    _used[a["uuid"]] = int(a.get("used") or 0)
+            except Exception:
+                pass
+        _now = _t.time()
+        _kv.kv_jset("vpx:hg", {"used": _used, "idx": int(HACKER_ST.get("idx") or 0),
+                               "exh": {u: v for u, v in (HACKER_ST.get("exhausted") or {}).items()
+                                       if isinstance(v, (int, float)) and v > _now},
+                               "date": _t.strftime("%Y-%m-%d", _t.gmtime())})
+    except Exception:
+        pass
+
+
 def hg_chat(messages, model_id="", timeout=110):
     """#124: HackerGPT — POST /api/v1/messages/ + poll; uuid pool rotation (3 credits/acct lifetime)."""
     import time as _t
     _hg_merge_file()
+    _hacker_load_acc()  # #127: shared rotation/counters (was per-instance → re-hammered dead uuids)
     tool = (model_id or "").strip().lower()
     if tool not in ("", "ctf", "osint"):
         tool = ""

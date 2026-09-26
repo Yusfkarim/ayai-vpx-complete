@@ -102,6 +102,43 @@ section{flex:1;display:flex;flex-direction:column;min-width:0;min-height:0}
  #cur .pill{max-width:50vw}
  .logo{font-size:16px}
 }
+.msg.a{max-width:100%;background:linear-gradient(180deg,rgba(124,92,240,.09),rgba(124,92,240,.02));border:1px solid rgba(124,92,240,.25);border-radius:18px;padding:15px 18px;font-size:15px;line-height:1.8;box-shadow:0 6px 28px rgba(0,0,0,.3)}
+.who{font-size:11px;font-weight:800;color:#b9a8ff;letter-spacing:.6px;margin-bottom:8px;text-transform:uppercase}
+.msg.u{max-width:85%;padding:11px 16px;border-radius:20px 20px 6px 20px;font-size:14.5px;line-height:1.65}
+.caret{display:inline-block;width:9px;height:17px;background:linear-gradient(180deg,#b18cff,#7c5cf0);border-radius:2px;animation:blink 1s steps(1) infinite;vertical-align:-3px;margin-left:2px}
+@keyframes blink{50%{opacity:0}}
+.msg h1{font-size:23px;border-bottom:2px solid rgba(124,92,240,.5);padding-bottom:8px;margin:16px 0 10px}
+.msg h2{font-size:20px;border-inline-start:4px solid var(--acc);padding-inline-start:12px;margin:14px 0 8px}
+.msg h3{font-size:17px;color:#e6dcff;margin:12px 0 6px}
+.msg h4{font-size:14px;color:#c9c2e8;text-transform:uppercase;letter-spacing:.6px;margin:10px 0 6px}
+.msg p{margin:7px 0}
+.msg li{margin:5px 0}
+.msg li::marker{color:var(--acc2);font-weight:800}
+.msg li.td{list-style:none;margin-inline-start:-22px}
+.msg a{color:#9ec5ff;text-decoration:none;border-bottom:1px dotted #9ec5ff}
+.msg a:hover{border-bottom-style:solid}
+.msg del{color:var(--mut)}
+.msg code{background:rgba(124,92,240,.13);border:1px solid rgba(124,92,240,.3);color:#ffc98a;border-radius:7px;padding:2px 7px;font-size:13px}
+.msg table{border-collapse:collapse;width:100%;margin:10px 0;font-size:13.5px}
+.msg th{background:rgba(124,92,240,.18);color:#fff;padding:9px 12px;border:1px solid var(--line);text-align:start;font-weight:800}
+.msg td{padding:8px 12px;border:1px solid var(--line)}
+.msg tr:nth-child(even) td{background:rgba(255,255,255,.025)}
+.tbl{overflow-x:auto;margin:4px 0;border-radius:12px}
+.msg blockquote{border-inline-start:4px solid var(--acc);padding:10px 14px;margin:10px 0;background:rgba(124,92,240,.07);border-radius:10px;font-size:14.5px}
+.msg hr{border:none;height:2px;background:linear-gradient(90deg,transparent,rgba(124,92,240,.6),transparent);margin:16px 0}
+.cb{margin:12px 0;border:1px solid rgba(124,92,240,.32);border-radius:14px;background:#0a0a13;box-shadow:0 8px 30px rgba(0,0,0,.4)}
+.cbl{background:linear-gradient(90deg,#1e1548,#14141f);padding:8px 8px 8px 14px;font-size:12px;color:#d9ccff;font-weight:800;display:flex;align-items:center;justify-content:space-between}
+.cb pre{padding:14px 16px;font-size:13px;line-height:1.7}
+.cpb{background:rgba(124,92,240,.14);color:#d9ccff;border:1px solid rgba(124,92,240,.45);border-radius:9px;font-size:11.5px;padding:5px 13px;min-height:0;font-weight:800}
+.cpb:hover{background:var(--acc);color:#fff;box-shadow:0 0 14px rgba(124,92,240,.6)}
+.cpb2{margin-top:12px;background:rgba(124,92,240,.1);color:#c9b8ff;border:1px solid rgba(124,92,240,.4);border-radius:12px;font-size:12.5px;padding:9px 20px;font-weight:800}
+.cpb2:hover{background:rgba(124,92,240,.25);color:#fff;border-color:var(--acc)}
+.meta{font-size:11px;color:#6f6f8a;margin-top:10px}
+.mrow{-webkit-tap-highlight-color:transparent}
+.mrow:active{background:#2a2156}
+#msgs{max-width:900px;margin:0 auto;width:100%}
+#inp{border-radius:18px}
+.hero h2{background:linear-gradient(90deg,#c4b5fd,#f0abfc);-webkit-background-clip:text;background-clip:text;color:transparent;font-size:24px}
 </style>
 </head>
 <body>
@@ -122,7 +159,7 @@ section{flex:1;display:flex;flex-direction:column;min-width:0;min-height:0}
 <div id="cur"><span style="color:var(--mut);font-size:13px">Model:</span><span class="pill" id="curm">—</span><button class="ghost" onclick="testCurrent()" style="margin-left:auto">⚡ Test</button><button class="ghost" onclick="clearChat()">Clear</button></div>
 <div id="msgs"><div class="hero" id="hero"><div class="big">💬</div><h2>Pick a model & start chatting</h2><p>190+ free AI models, no login, no API key.<br>Tap ☰ to browse models, ⚡ to test if one answers.</p><div class="hint">⚡ = test model directly &nbsp;•&nbsp; 🔄 = fetch newest models</div></div></div>
 <div id="box">
-<div id="sysrow" class="show"><textarea id="sys" rows="8" placeholder="System prompt…"># 🎨 SYSTEM INSTRUCTION: ABSOLUTE MARKDOWN &amp; VISUAL FORMATTING PROTOCOL
+<div id="sysrow"><textarea id="sys" rows="8" placeholder="System prompt…"># 🎨 SYSTEM INSTRUCTION: ABSOLUTE MARKDOWN &amp; VISUAL FORMATTING PROTOCOL
 
 You are an advanced AI context decorator. Your primary mission is to format ALL generated text with strict Markdown compliance, exceptional typography, visual hierarchy, and precise RTL/LTR text alignment.
 
@@ -254,26 +291,47 @@ function cpMsg(btn){let b=btn.closest?btn.closest(".msg"):null;if(b&&b._raw!==un
 function renderMd(t){
  let e=esc(t),code=[];
  e=e.replace(/```(\\w*)\\n([\\s\\S]*?)```/g,(m,l,c)=>{code.push({l:l||"code",c:c.replace(/\\n$/,"")});return "\\x00"+(code.length-1)+"\\x00";});
- let html="",inul=false,inol=false;
- const inline=s=>s.replace(/`([^`\\n]+)`/g,"<code>$1</code>").replace(/\\*\\*([^*]+)\\*\\*/g,"<b>$1</b>").replace(/(^|[\\s(])\\*([^\\*\\n]+)\\*/g,"$1<i>$2</i>");
+ const linkify=s=>s.replace(/\\[([^\\]]+)\\]\\((https?:[^)\\s]+)\\)/g,"<a href=\\"$2\\" target=\\"_blank\\" rel=\\"noopener\\">$1</a>").replace(/(^|[\\s(])(https?:\\/\\/[^\\s<]+)/g,"$1<a href=\\"$2\\" target=\\"_blank\\" rel=\\"noopener\\">$2</a>");
+ const inline=s=>linkify(s).replace(/`([^`\\n]+)`/g,"<code>$1</code>").replace(/~~([^~]+)~~/g,"<del>$1</del>").replace(/\\*\\*([^*]+)\\*\\*/g,"<b>$1</b>").replace(/(^|[\\s(])\\*([^\\*\\n]+)\\*/g,"$1<i>$2</i>");
+ const rowCells=s=>s.replace(/^\\||\\|$/g,"").split("|").map(c=>inline(c.trim()));
+ let html="",inul=false,inol=false,intbl=false;
+ const closeLists=()=>{if(inul){html+="</ul>";inul=false;}if(inol){html+="</ol>";inol=false;}};
+ const closeTbl=()=>{if(intbl){html+="</table></div>";intbl=false;}};
  for(let ln of e.split("\\n")){
   let m,trim=ln.trim();
-  if(/^\\x00\\d+\\x00$/.test(trim)){if(inul){html+="</ul>";inul=false;}if(inol){html+="</ol>";inol=false;}let b=code[+trim.slice(1,-1)];html+="<div class='cb'><div class='cbl'><span>"+b.l+"</span><button class='cpb' onclick='cpCode(this)'>\u29c9 \u06a9\u0648\u067e\u0649</button></div><pre>"+b.c+"</pre></div>";continue;}
-  if(m=ln.match(/^(#{1,4})\\s+(.*)$/)){if(inul){html+="</ul>";inul=false;}if(inol){html+="</ol>";inol=false;}html+="<h"+m[1].length+">"+inline(m[2].replace(/\\s#+$/,""))+"</h"+m[1].length+">";continue;}
-  if(/^-{3,}$/.test(trim)){if(inul){html+="</ul>";inul=false;}if(inol){html+="</ol>";inol=false;}html+="<hr>";continue;}
-  if(m=ln.match(/^&gt;\\s?(.*)$/)){if(inul){html+="</ul>";inul=false;}if(inol){html+="</ol>";inol=false;}html+="<blockquote>"+inline(m[1])+"</blockquote>";continue;}
+  if(/^\\x00\\d+\\x00$/.test(trim)){closeLists();closeTbl();let b=code[+trim.slice(1,-1)];html+="<div class='cb'><div class='cbl'><span>"+b.l+"</span><button class='cpb' onclick='cpCode(this)'>⧉ کوپی</button></div><pre>"+b.c+"</pre></div>";continue;}
+  if(/^\\|.*\\|$/.test(trim)&&!intbl){closeLists();html+="<div class='tbl'><table>";intbl=true;}
+  if(intbl){
+   if(!/^\\|.*\\|$/.test(trim)){closeTbl();}
+   else{
+    if(/^\\|[\\s:|\\-]+\\|$/.test(trim))continue;
+    let th=html.endsWith("<table>");
+    html+="<tr>"+rowCells(trim).map(c=>th?"<th>"+c+"</th>":"<td>"+c+"</td>").join("")+"</tr>";continue;
+   }
+  }
+  if(m=ln.match(/^(#{1,4})\\s+(.*)$/)){closeLists();html+="<h"+m[1].length+">"+inline(m[2].replace(/\\s+#$/,""))+"</h"+m[1].length+">";continue;}
+  if(/^([-*_])\\1{2,}$/.test(trim.replace(/\\s/g,""))){closeLists();html+="<hr>";continue;}
+  if(m=ln.match(/^&gt;\\s?(.*)$/)){closeLists();html+="<blockquote>"+inline(m[1])+"</blockquote>";continue;}
   if(m=ln.match(/^(\\d+)[.)]\\s+(.*)$/)){if(inul){html+="</ul>";inul=false;}if(!inol){html+="<ol>";inol=true;}html+="<li>"+inline(m[2])+"</li>";continue;}
+  if(m=ln.match(/^[-*]\\s+\\[([ xX])\\]\\s+(.*)$/)){if(inol){html+="</ol>";inol=false;}if(!inul){html+="<ul>";inul=true;}html+="<li class='td'>"+(m[1]===" "?"☐":"☑")+" "+inline(m[2])+"</li>";continue;}
   if(m=ln.match(/^[-*]\\s+(.*)$/)){if(inol){html+="</ol>";inol=false;}if(!inul){html+="<ul>";inul=true;}html+="<li>"+inline(m[1])+"</li>";continue;}
-  if(!trim){if(inul){html+="</ul>";inul=false;}if(inol){html+="</ol>";inol=false;}continue;}
+  if(!trim){closeLists();continue;}
   html+="<p>"+inline(ln)+"</p>";
  }
- if(inul)html+="</ul>";if(inol)html+="</ol>";
+ closeLists();closeTbl();
  return html;
 }
 function stream(el,full,meta){
  let i=0;el.textContent="";
- let iv=setInterval(()=>{i+=16;el.textContent=full.slice(0,i);
-  if(i>=full.length){clearInterval(iv);el._raw=full;el.innerHTML=renderMd(full);let m=document.createElement("div");m.className="meta";m.textContent=meta;el.appendChild(m);let cb=document.createElement("button");cb.className="cpb2";cb.textContent="\u29c9 \u06a9\u0648\u067e\u0649 \u0646\u0627\u0645\u06d5";cb.onclick=function(){cpMsg(this);};el.appendChild(cb);}},25);
+ let car=document.createElement("span");car.className="caret";
+ let iv=setInterval(()=>{i+=24;el.textContent=full.slice(0,i);el.appendChild(car);
+  try{$("msgs").scrollTop=1e9;}catch(e){}
+  if(i>=full.length){clearInterval(iv);el._raw=full;el.innerHTML="";
+   let who=document.createElement("div");who.className="who";who.textContent="▲ "+(CUR||"assistant");el.appendChild(who);
+   let bd=document.createElement("div");bd.innerHTML=renderMd(full);while(bd.firstChild)el.appendChild(bd.firstChild);
+   let m=document.createElement("div");m.className="meta";m.textContent=meta;el.appendChild(m);
+   let cb=document.createElement("button");cb.className="cpb2";cb.textContent="⧉ کوپی نامە";cb.onclick=function(){cpMsg(this);};el.appendChild(cb);
+   try{$("msgs").scrollTop=1e9;}catch(e){}}},25);
 }
 async function testModel(id,idx){
  let sl=document.querySelectorAll('[id="t'+idx+'"]');

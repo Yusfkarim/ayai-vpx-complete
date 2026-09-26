@@ -3181,6 +3181,22 @@ def _worm_is_fa(t):
         return False
 
 
+def _worm_cookies():
+    """#128: logged-in .cam session cookies pool (gist vpx:wcam {cookies:[...]}) — guest killed site-side, free quota needs login."""
+    try:
+        import time as _t
+        _c = globals().setdefault("_WCAM_C", {"t": 0, "d": []})
+        if _t.time() - float(_c.get("t") or 0) < 300 and isinstance(_c.get("d"), list):
+            return [c for c in _c["d"] if c]
+        import kv as _kv
+        d = _kv.kv_jget("vpx:wcam") or {}
+        _cs = [c.strip() for c in (d.get("cookies") or []) if isinstance(c, str) and "worm_" in c]
+        _c.update({"t": _t.time(), "d": _cs})
+        return _cs
+    except Exception:
+        return []
+
+
 def _worm_guest(lines, model_id, timeout):
     """#123e: guest pool — idx round-robin + per-transport cooldown + chats counter (like ca/cb/cbox)."""
     import time as _t
@@ -3197,6 +3213,13 @@ def _worm_guest(lines, model_id, timeout):
         _cool = {}
     _now = _t.time()
     last = None
+    _ckjs = _worm_cookies()  # #128: logged-in sessions (guest dead site-side; free quota needs login)
+    try:
+        _ci = int(WORM_ST.get("cidx") or 0)
+        WORM_ST["cidx"] = _ci + 1
+    except Exception:
+        _ci = 0
+    _ckv = _ckjs[_ci % len(_ckjs)] if _ckjs else None
     for px in _pxs:
         _ck = px or "direct"
         try:
@@ -3213,6 +3236,8 @@ def _worm_guest(lines, model_id, timeout):
                   "timeout": (10, timeout)}
             if px:
                 kw["proxies"] = {"http": px, "https": px}
+            if _ckv:
+                kw["headers"]["Cookie"] = _ckv
             r = requests.post("https://wormgpt.cam/api/chat", **kw)
         except Exception as e:
             if px:
@@ -3229,6 +3254,15 @@ def _worm_guest(lines, model_id, timeout):
                 msg = ""
             if any(w in msg for w in ("خطت", "plan", "مدفوع", "paid", "402", "اشتر")):
                 raise EMError("worm: پلان")
+            if _ckv and any(w in msg for w in ("دخول", "login", "Login", "session", "auth")):
+                try:
+                    _cc = globals().get("_WCAM_C") or {}
+                    _cc["d"] = [c for c in (_cc.get("d") or []) if c != _ckv]
+                except Exception:
+                    pass
+                _ckv = None  # #128: bad cookie → drop it, keep transports uncooled, plain next
+                last = EMError("worm-g: کوکی خراپ")
+                continue
             try:
                 _cool[_ck] = _now + 3600
             except Exception:
